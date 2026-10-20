@@ -68,7 +68,7 @@ parse_rmd_text <- function(text, file_id = "document") {
   find_close <- function(from, token, limit = n, exact_backticks = FALSE) {
     j <- from; size <- nchar(token)
     while (j + size - 1L <= limit) {
-      if (starts(j, token) && !escaped(j)) {
+      if (starts(j, token) && (exact_backticks || !escaped(j))) {
         if (!exact_backticks ||
             (run_length(j, "`") == size && (j == 1L || chars[j - 1L] != "`")))
           return(j)
