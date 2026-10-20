@@ -18,6 +18,8 @@ check_spans <- function(d) {
       nl <- gregexpr("\n", pre, fixed = TRUE)[[1L]]
       expected_line <- 1L + if (nl[1L] == -1L) 0L else length(nl)
       check(u$start_line[k] == expected_line, paste("line map", k))
+      expected_column <- nchar(pre) - if (nl[1L] == -1L) 0L else tail(nl, 1L)
+      check(u$start_column[k] == expected_column + 1L, paste("column map", k))
       check(identical(substr(d$source, u$start_offset[k], u$end_offset[k]), u$raw[k]), paste("raw span", k))
       expected_content <- if (u$content_start[k] > u$content_end[k]) "" else
         substr(d$source, u$content_start[k], u$content_end[k])
@@ -61,6 +63,8 @@ check(has_diag(fences, "code_language_limited"), "non-R limitation")
 inline <- parse_rmd_text("普通 ``a ` b`` 和 `r 1+1`。")
 check("a ` b" %in% inline$units$content, "variable inline backtick length")
 check("1+1" %in% inline$units$content, "inline R not evaluated")
+slash_code <- parse_rmd_text("`a\\`")
+check(identical(slash_code$units$type, "inline_code"), "backslash does not escape a closing code delimiter")
 
 for (case in list(c("---\ntitle: x", "unclosed_yaml"),
                  c("```{r}\nx <- 1", "unclosed_fence"),
