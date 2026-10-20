@@ -1,3 +1,4 @@
 # 开发模块
 
-后续按解析、文字、公式、代码、证据与报告拆分R函数。当前没有算法实现。最终通过构建过程生成单文件detector.Rmd。
+parser.R提供read_rmd和parse_rmd_text，纯base R，不执行输入代码。详见docs/parser-spec.md。后续追加文字、公式、代码检测与证据模块；最终生成单文件detector.Rmd。
+
