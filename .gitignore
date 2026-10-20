@@ -1,0 +1,23 @@
+# R local state
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+# Secrets and local configuration
+.Renviron
+.env
+.env.*
+!.env.example
+# Private inputs and outputs
+data-private/
+reports-local/
+validation/holdout-local/
+validation/results-local/
+# Generated deliverables
+dist/
+detector.html
+detector_files/
+detector_cache/
+# OS/editor
+.DS_Store
+Thumbs.db
