@@ -66,6 +66,40 @@ check("1+1" %in% inline$units$content, "inline R not evaluated")
 slash_code <- parse_rmd_text("`a\\`")
 check(identical(slash_code$units$type, "inline_code"), "backslash does not escape a closing code delimiter")
 
+# 验证：行内R代码只提取，不执行
+inline_stop <- parse_rmd_text(
+  "正文 $x$ 与 `r stop('不应执行')`。"
+)
+
+# 1. 应当识别出一段公式
+check(
+  sum(inline_stop$units$type == "math") == 1L,
+  "one math unit beside inline R"
+)
+
+# 2. 应当识别出一段行内R代码
+check(
+  sum(inline_stop$units$type == "inline_r") == 1L,
+  "one inline R unit"
+)
+
+# 3. 应当正确提取代码内容
+check(
+  identical(
+    inline_stop$units$content[
+      inline_stop$units$type == "inline_r"
+    ],
+    "stop('不应执行')"
+  ),
+  "inline R stop expression preserved without execution"
+)
+
+# 4. 这个合法样例不应产生诊断信息
+check(
+  nrow(inline_stop$diagnostics) == 0L,
+  "valid inline R produces no diagnostics"
+)
+
 for (case in list(c("---\ntitle: x", "unclosed_yaml"),
                  c("```{r}\nx <- 1", "unclosed_fence"),
                  c("公式 $x\n后续文字", "unclosed_math"),
