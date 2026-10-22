@@ -171,4 +171,77 @@ for (i in seq_len(nrow(prepared))) {
   )
 }
 
+# 样例十三：连续片段的内容与位置
+grams <- make_character_ngrams("统计分析方法", k = 3L)
+
+stopifnot(
+  identical(
+    grams$gram,
+    c("统计分", "计分析", "分析方", "析方法")
+  ),
+  identical(grams$start, 1:4),
+  identical(grams$end, 3:6)
+)
+
+# 样例十四：文本长度恰好等于k
+exact <- make_character_ngrams("统计", k = 2L)
+
+stopifnot(
+  nrow(exact) == 1L,
+  identical(exact$gram, "统计"),
+  identical(exact$start, 1L),
+  identical(exact$end, 2L)
+)
+
+# 样例十五：空文本和过短文本
+for (input in c("", "统")) {
+  short <- make_character_ngrams(input, k = 2L)
+
+  stopifnot(
+    nrow(short) == 0L,
+    identical(names(short), c("gram", "start", "end")),
+    is.character(short$gram),
+    is.integer(short$start),
+    is.integer(short$end)
+  )
+}
+
+# 样例十六：相同片段在不同位置重复出现，应保留
+repeated <- make_character_ngrams("哈哈哈哈", k = 2L)
+
+stopifnot(
+  identical(repeated$gram, rep("哈哈", 3L)),
+  identical(repeated$start, 1:3),
+  identical(repeated$end, 2:4)
+)
+
+# 样例十七：k为1时，每个字符形成一个片段
+single <- make_character_ngrams("甲乙", k = 1L)
+
+stopifnot(
+  identical(single$gram, c("甲", "乙")),
+  identical(single$start, 1:2),
+  identical(single$end, 1:2)
+)
+
+# 样例十八：拒绝无效的k
+for (bad_k in list(0, -1, 1.5, NA_real_, Inf, "3", c(2, 3))) {
+  invalid_result <- try(
+    make_character_ngrams("统计分析", k = bad_k),
+    silent = TRUE
+  )
+
+  stopifnot(inherits(invalid_result, "try-error"))
+}
+
+# 样例十九：拒绝无效的文字输入
+for (bad_text in list(NA_character_, 123, c("甲", "乙"))) {
+  invalid_result <- try(
+    make_character_ngrams(bad_text, k = 2L),
+    silent = TRUE
+  )
+
+  stopifnot(inherits(invalid_result, "try-error"))
+}
+
 cat("Text module tests passed.\n")

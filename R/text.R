@@ -77,3 +77,48 @@ prepare_text_units <- function(doc) {
 
   units
 }
+
+# 将字符串切成固定长度的连续字符片段
+make_character_ngrams <- function(text, k = 5L) {
+
+  if (!is.character(text) ||
+      length(text) != 1L ||
+      is.na(text)) {
+    stop("text must be one non-missing character string.")
+  }
+
+  # k必须是可表示的正整数
+  if (!is.numeric(k) ||
+      length(k) != 1L ||
+      is.na(k) ||
+      !is.finite(k) ||
+      k < 1 ||
+      k != floor(k) ||
+      k > .Machine$integer.max) {
+    stop("k must be a positive integer.")
+  }
+
+  k <- as.integer(k)
+  text <- enc2utf8(text)
+  n <- nchar(text, type = "chars")
+
+  # 无法组成完整片段时，返回结构一致的空表
+  if (n < k) {
+    return(data.frame(
+      gram = character(),
+      start = integer(),
+      end = integer(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  starts <- seq_len(n - k + 1L)
+  ends <- starts + k - 1L
+
+  data.frame(
+    gram = substring(text, starts, ends),
+    start = starts,
+    end = ends,
+    stringsAsFactors = FALSE
+  )
+}
