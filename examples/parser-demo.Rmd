@@ -1,0 +1,27 @@
+---
+title: "解析示例：只读取，不执行"
+output: html_document
+---
+
+# 第一题：估计量
+
+样本均值为 $\bar{x}=\frac{1}{n}\sum_{i=1}^{n}x_i$。这里仅演示内容分类。
+
+\[
+E(\bar{x})=\frac{1}{n}\sum_{i=1}^{n}E(x_i)=\mu
+\]
+
+# 第二题：代码
+
+以下代码是用于验证“不执行”的示例，不应编译本示例文件。
+
+```{r demonstration, eval=FALSE}
+# $这不是公式$，这是代码注释。
+stop("解析时不应执行到这里")
+```
+
+行内R代码 `r mean(c(1, 2, 3))` 和普通对象名 `fit` 应分开识别。
+
+![未读取的图片示例](not-present.png)
+
+[参考链接标签](https://example.org)
