@@ -192,3 +192,34 @@ make_document_ngrams <- function(doc, k = 5L) {
   result
 }
 
+# 比较两份文档的正文字符片段集合
+compare_text_jaccard <- function(doc_a, doc_b, k = 5L) {
+
+  grams_a <- make_document_ngrams(doc_a, k = k)
+  grams_b <- make_document_ngrams(doc_b, k = k)
+
+  # 集合比较：相同片段只保留一次
+  set_a <- unique(grams_a$gram)
+  set_b <- unique(grams_b$gram)
+
+  shared <- intersect(set_a, set_b)
+  combined <- union(set_a, set_b)
+
+  enough <- length(set_a) > 0L && length(set_b) > 0L
+
+  similarity <- if (enough) {
+    length(shared) / length(combined)
+  } else {
+    NA_real_
+  }
+
+  list(
+    similarity = similarity,
+    status = if (enough) "ok" else "insufficient_ngrams",
+    k = as.integer(k),
+    unique_count_a = length(set_a),
+    unique_count_b = length(set_b),
+    shared_count = length(shared),
+    union_count = length(combined)
+  )
+}

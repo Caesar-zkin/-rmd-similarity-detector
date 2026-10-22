@@ -339,4 +339,79 @@ invalid_result <- try(
 
 stopifnot(inherits(invalid_result, "try-error"))
 
+# 样例二十五：可人工计算的相似度
+doc_a <- parse_rmd_text("统计分析", file_id = "A")
+doc_b <- parse_rmd_text("统计方法", file_id = "B")
+
+comparison <- compare_text_jaccard(doc_a, doc_b, k = 2L)
+
+stopifnot(
+  identical(comparison$status, "ok"),
+  comparison$unique_count_a == 3L,
+  comparison$unique_count_b == 3L,
+  comparison$shared_count == 1L,
+  comparison$union_count == 5L,
+  isTRUE(all.equal(comparison$similarity, 1 / 5))
+)
+
+# 样例二十六：交换输入顺序，不改变相似度
+reverse_comparison <- compare_text_jaccard(
+  doc_b, doc_a, k = 2L
+)
+
+stopifnot(
+  identical(
+    comparison$similarity,
+    reverse_comparison$similarity
+  )
+)
+
+# 样例二十七：相同正文相似度为1
+same <- compare_text_jaccard(doc_a, doc_a, k = 2L)
+
+stopifnot(same$similarity == 1)
+
+# 样例二十八：两个非空集合没有共有片段
+different <- compare_text_jaccard(
+  parse_rmd_text("甲乙丙丁"),
+  parse_rmd_text("天地玄黄"),
+  k = 2L
+)
+
+stopifnot(
+  identical(different$status, "ok"),
+  different$similarity == 0
+)
+
+# 样例二十九：集合指标不考虑重复次数
+repeated_comparison <- compare_text_jaccard(
+  parse_rmd_text("哈哈哈哈"),
+  parse_rmd_text("哈哈"),
+  k = 2L
+)
+
+stopifnot(
+  repeated_comparison$unique_count_a == 1L,
+  repeated_comparison$unique_count_b == 1L,
+  repeated_comparison$similarity == 1
+)
+
+# 样例三十：任意一边没有有效片段，都应返回信息不足
+for (pair in list(
+  list(parse_rmd_text("统"), doc_a),
+  list(doc_a, parse_rmd_text("$x$")),
+  list(parse_rmd_text(""), parse_rmd_text(""))
+)) {
+  insufficient <- compare_text_jaccard(
+    pair[[1L]], pair[[2L]], k = 2L
+  )
+
+  stopifnot(
+    is.na(insufficient$similarity),
+    identical(insufficient$status, "insufficient_ngrams")
+  )
+}
+
 cat("Text module tests passed.\n")
+
+
