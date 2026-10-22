@@ -37,4 +37,59 @@ invalid_result <- try(
 
 stopifnot(inherits(invalid_result, "try-error"))
 
-cat("Text extraction tests passed.\n")
+# 样例四：去除普通空格，同时保留位置
+normalized <- normalize_text("统 计 分 析")
+
+stopifnot(
+  identical(normalized$text, "统计分析"),
+  identical(normalized$source_positions, c(1L, 3L, 5L, 7L))
+)
+
+# 样例五：制表符和换行
+normalized <- normalize_text("A\tB\nC")
+
+stopifnot(
+  identical(normalized$text, "ABC"),
+  identical(normalized$source_positions, c(1L, 3L, 5L))
+)
+
+# 样例六：不换行空格与全角空格
+normalized <- normalize_text("统\u00a0计\u3000学")
+
+stopifnot(
+  identical(normalized$text, "统计学"),
+  identical(normalized$source_positions, c(1L, 3L, 5L))
+)
+
+# 样例七：保留大小写和标点
+normalized <- normalize_text("R 语言，A!")
+
+stopifnot(
+  identical(normalized$text, "R语言，A!"),
+  identical(
+    normalized$source_positions,
+    c(1L, 3L, 4L, 5L, 6L, 7L)
+  )
+)
+
+# 样例八：空字符串和全空白字符串
+for (input in c("", " \t\n\u3000")) {
+  normalized <- normalize_text(input)
+
+  stopifnot(
+    identical(normalized$text, ""),
+    identical(normalized$source_positions, integer())
+  )
+}
+
+# 样例九：错误输入
+for (input in list(NA_character_, 123, c("甲", "乙"))) {
+  invalid_result <- try(
+    normalize_text(input),
+    silent = TRUE
+  )
+
+  stopifnot(inherits(invalid_result, "try-error"))
+}
+
+cat("Text extraction and normalization tests passed.\n")
