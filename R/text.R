@@ -48,3 +48,32 @@ normalize_text <- function(text) {
     source_positions = source_positions
   )
 }
+
+# 提取并规范化正文，将字符位置映射回文档
+prepare_text_units <- function(doc) {
+
+  units <- extract_text_units(doc)
+
+  # 分别处理每个正文单元
+  normalized <- lapply(units$content, normalize_text)
+
+  # 每个单元对应一个规范化字符串
+  units$normalized_text <- vapply(
+    normalized,
+    function(item) item$text,
+    character(1)
+  )
+
+  # 单元内位置转换为文档位置
+  positions <- lapply(seq_len(nrow(units)), function(i) {
+    as.integer(
+      units$content_start[i] +
+        normalized[[i]]$source_positions - 1L
+    )
+  })
+
+  # 每行保存长度可能不同的位置向量
+  units$source_positions <- I(positions)
+
+  units
+}

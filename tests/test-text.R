@@ -92,4 +92,83 @@ for (input in list(NA_character_, 123, c("甲", "乙"))) {
   stopifnot(inherits(invalid_result, "try-error"))
 }
 
-cat("Text extraction and normalization tests passed.\n")
+# 样例十：映射回整篇文档
+mapped_doc <- parse_rmd_text(
+  "# 标题\n\n统 计 $x$ 分 析。",
+  file_id = "A"
+)
+
+prepared <- prepare_text_units(mapped_doc)
+
+stopifnot(
+  nrow(prepared) == 2L,
+
+  identical(
+    prepared$normalized_text,
+    c("统计", "分析。")
+  ),
+
+  identical(
+    prepared$source_positions[[1L]],
+    c(7L, 9L)
+  ),
+
+  identical(
+    prepared$source_positions[[2L]],
+    c(15L, 17L, 18L)
+  ),
+
+  identical(
+    prepared$unit_id,
+    extract_text_units(mapped_doc)$unit_id
+  )
+)
+
+# 样例十一：链接标签的内容起点不同于原文单元起点
+link_doc <- parse_rmd_text(
+  "[统 计](https://example.org)"
+)
+
+prepared_link <- prepare_text_units(link_doc)
+
+stopifnot(
+  identical(prepared_link$normalized_text, "统计"),
+
+  identical(
+    prepared_link$source_positions[[1L]],
+    c(2L, 4L)
+  )
+)
+
+# 样例十二：没有正文时仍保留输出结构
+prepared_empty <- prepare_text_units(
+  parse_rmd_text("$x$")
+)
+
+stopifnot(
+  is.data.frame(prepared_empty),
+  nrow(prepared_empty) == 0L,
+
+  all(c("normalized_text", "source_positions") %in%
+        names(prepared_empty))
+)
+
+# 根据映射从文档原文取回字符，应能重建规范化文字
+for (i in seq_len(nrow(prepared))) {
+  positions <- prepared$source_positions[[i]]
+
+  recovered <- paste0(
+    substring(
+      mapped_doc$source,
+      positions,
+      positions
+    ),
+    collapse = ""
+  )
+
+  stopifnot(
+    identical(recovered, prepared$normalized_text[i])
+  )
+}
+
+cat("Text module tests passed.\n")
