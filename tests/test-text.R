@@ -244,4 +244,99 @@ for (bad_text in list(NA_character_, 123, c("甲", "乙"))) {
   stopifnot(inherits(invalid_result, "try-error"))
 }
 
+# 样例二十：文档片段与原文位置
+gram_doc <- parse_rmd_text(
+  "# 标题\n\n统 计 分 析",
+  file_id = "A"
+)
+
+document_grams <- make_document_ngrams(gram_doc, k = 2L)
+
+stopifnot(
+  identical(
+    document_grams$gram,
+    c("统计", "计分", "分析")
+  ),
+  identical(document_grams$file_id, rep("A", 3L)),
+  identical(document_grams$normalized_start, 1:3),
+  identical(document_grams$normalized_end, 2:4),
+
+  identical(
+    document_grams$source_positions[[1L]],
+    c(7L, 9L)
+  ),
+  identical(
+    document_grams$source_positions[[2L]],
+    c(9L, 11L)
+  ),
+  identical(
+    document_grams$source_positions[[3L]],
+    c(11L, 13L)
+  )
+)
+
+# 根据原文位置取回字符，应得到对应片段
+for (i in seq_len(nrow(document_grams))) {
+  positions <- document_grams$source_positions[[i]]
+
+  recovered <- paste0(
+    substring(gram_doc$source, positions, positions),
+    collapse = ""
+  )
+
+  stopifnot(
+    identical(recovered, document_grams$gram[i])
+  )
+}
+
+# 样例二十一：不跨公式拼接正文单元
+split_doc <- parse_rmd_text("统计 $x$ 分析")
+
+split_grams <- make_document_ngrams(split_doc, k = 2L)
+
+stopifnot(
+  identical(split_grams$gram, c("统计", "分析")),
+  length(unique(split_grams$unit_id)) == 2L,
+  nrow(make_document_ngrams(split_doc, k = 3L)) == 0L
+)
+
+# 样例二十二：没有正文，或正文太短
+no_text <- make_document_ngrams(
+  parse_rmd_text("$x$"),
+  k = 2L
+)
+
+too_short <- make_document_ngrams(
+  parse_rmd_text("统"),
+  k = 2L
+)
+
+stopifnot(
+  nrow(no_text) == 0L,
+  nrow(too_short) == 0L,
+  identical(names(no_text), names(document_grams)),
+  identical(names(too_short), names(document_grams)),
+  is.list(no_text$source_positions)
+)
+
+# 样例二十三：重复片段保留不同位置
+repeated_doc <- make_document_ngrams(
+  parse_rmd_text("哈哈哈哈"),
+  k = 2L
+)
+
+stopifnot(
+  nrow(repeated_doc) == 3L,
+  identical(repeated_doc$source_positions[[1L]], c(1L, 2L)),
+  identical(repeated_doc$source_positions[[3L]], c(3L, 4L))
+)
+
+# 样例二十四：即使文档没有正文，无效k也应报错
+invalid_result <- try(
+  make_document_ngrams(parse_rmd_text("$x$"), k = 0L),
+  silent = TRUE
+)
+
+stopifnot(inherits(invalid_result, "try-error"))
+
 cat("Text module tests passed.\n")

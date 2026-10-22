@@ -122,3 +122,73 @@ make_character_ngrams <- function(text, k = 5L) {
     stringsAsFactors = FALSE
   )
 }
+
+# 为整份文档生成正文片段，并保留原文字符位置
+make_document_ngrams <- function(doc, k = 5L) {
+
+  units <- prepare_text_units(doc)
+
+  # 即使没有正文，也要验证k，并建立稳定的空表结构
+  empty_grams <- make_character_ngrams("", k = k)
+
+  empty_result <- data.frame(
+    file_id = character(),
+    unit_id = character(),
+    context_id = character(),
+    gram = empty_grams$gram,
+    normalized_start = empty_grams$start,
+    normalized_end = empty_grams$end,
+    stringsAsFactors = FALSE
+  )
+
+  empty_result$source_positions <- I(vector("list", 0L))
+
+  parts <- list()
+
+  for (i in seq_len(nrow(units))) {
+
+    grams <- make_character_ngrams(
+      units$normalized_text[i],
+      k = k
+    )
+
+    # 当前单元太短时，不生成片段
+    if (nrow(grams) == 0L) {
+      next
+    }
+
+    part <- data.frame(
+      file_id = units$file_id[i],
+      unit_id = units$unit_id[i],
+      context_id = units$context_id[i],
+      gram = grams$gram,
+      normalized_start = grams$start,
+      normalized_end = grams$end,
+      stringsAsFactors = FALSE
+    )
+
+    # 从已有映射中取出每个片段对应的文档字符位置
+    positions <- lapply(seq_len(nrow(grams)), function(j) {
+      indices <- seq.int(
+        grams$start[j],
+        grams$end[j]
+      )
+
+      units$source_positions[[i]][indices]
+    })
+
+    part$source_positions <- I(positions)
+
+    parts[[length(parts) + 1L]] <- part
+  }
+
+  if (length(parts) == 0L) {
+    return(empty_result)
+  }
+
+  result <- do.call(rbind, parts)
+  rownames(result) <- NULL
+
+  result
+}
+
