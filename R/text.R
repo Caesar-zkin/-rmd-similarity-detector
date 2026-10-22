@@ -223,3 +223,63 @@ compare_text_jaccard <- function(doc_a, doc_b, k = 5L) {
     union_count = length(combined)
   )
 }
+
+# 找到两份文档中内容完全相同的字符片段
+match_text_ngrams <- function(
+    doc_a, doc_b, k = 5L, max_pairs = 50000L) {
+
+  if (!is.numeric(max_pairs) ||
+      length(max_pairs) != 1L ||
+      is.na(max_pairs) ||
+      !is.finite(max_pairs) ||
+      max_pairs < 1 ||
+      max_pairs != floor(max_pairs)) {
+    stop("max_pairs must be a positive integer.")
+  }
+
+  grams_a <- make_document_ngrams(doc_a, k = k)
+  grams_b <- make_document_ngrams(doc_b, k = k)
+
+  # 计算重复片段展开后，会产生多少对匹配
+  counts_a <- table(grams_a$gram)
+  counts_b <- table(grams_b$gram)
+
+  shared <- intersect(names(counts_a), names(counts_b))
+
+  pair_count <- sum(
+    as.double(counts_a[shared]) *
+      as.double(counts_b[shared])
+  )
+
+  # 防止大量重复片段产生过大的结果，不静默丢弃匹配
+  if (pair_count > max_pairs) {
+    stop(
+      "Matching pairs exceed max_pairs. ",
+      "Use a larger k or explicitly increase max_pairs."
+    )
+  }
+
+  matches <- merge(
+    grams_a,
+    grams_b,
+    by = "gram",
+    suffixes = c("_a", "_b"),
+    sort = FALSE
+  )
+
+  # 按两侧出现位置排序，方便检查
+  matches <- matches[
+    order(
+      matches$unit_id_a,
+      matches$normalized_start_a,
+      matches$unit_id_b,
+      matches$normalized_start_b
+    ),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(matches) <- NULL
+
+  matches
+}

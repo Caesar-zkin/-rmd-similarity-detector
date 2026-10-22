@@ -412,6 +412,91 @@ for (pair in list(
   )
 }
 
+# 样例三十一：共有片段及两侧位置
+match_a <- parse_rmd_text("统计分析", file_id = "A")
+match_b <- parse_rmd_text("统计方法", file_id = "B")
+
+matches <- match_text_ngrams(match_a, match_b, k = 2L)
+
+stopifnot(
+  nrow(matches) == 1L,
+  identical(matches$gram, "统计"),
+  identical(matches$file_id_a, "A"),
+  identical(matches$file_id_b, "B"),
+  identical(matches$source_positions_a[[1L]], c(1L, 2L)),
+  identical(matches$source_positions_b[[1L]], c(1L, 2L))
+)
+
+# 样例三十二：重复片段保留所有出现位置组合
+repeated_matches <- match_text_ngrams(
+  parse_rmd_text("哈哈哈", file_id = "A"),
+  parse_rmd_text("哈哈哈", file_id = "B"),
+  k = 2L
+)
+
+stopifnot(
+  nrow(repeated_matches) == 4L,
+  identical(
+    repeated_matches$normalized_start_a,
+    c(1L, 1L, 2L, 2L)
+  ),
+  identical(
+    repeated_matches$normalized_start_b,
+    c(1L, 2L, 1L, 2L)
+  )
+)
+
+# 样例三十三：没有共有片段时，保留空表结构
+no_matches <- match_text_ngrams(
+  parse_rmd_text("甲乙"),
+  parse_rmd_text("丙丁"),
+  k = 2L
+)
+
+stopifnot(
+  nrow(no_matches) == 0L,
+  identical(names(no_matches), names(matches))
+)
+
+# 样例三十四：一侧没有片段，也应正常返回空表
+missing_matches <- match_text_ngrams(
+  parse_rmd_text("$x$"),
+  match_b,
+  k = 2L
+)
+
+stopifnot(
+  nrow(missing_matches) == 0L,
+  identical(names(missing_matches), names(matches))
+)
+
+# 样例三十五：超过匹配数量上限时明确报错
+too_many <- try(
+  match_text_ngrams(
+    parse_rmd_text("哈哈哈"),
+    parse_rmd_text("哈哈哈"),
+    k = 2L,
+    max_pairs = 3L
+  ),
+  silent = TRUE
+)
+
+stopifnot(inherits(too_many, "try-error"))
+
+# 样例三十六：拒绝无效的数量上限
+for (bad_limit in list(0, 1.5, NA_real_, Inf, "10")) {
+  invalid_result <- try(
+    match_text_ngrams(
+      match_a, match_b,
+      k = 2L,
+      max_pairs = bad_limit
+    ),
+    silent = TRUE
+  )
+
+  stopifnot(inherits(invalid_result, "try-error"))
+}
+
 cat("Text module tests passed.\n")
 
 
