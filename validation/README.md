@@ -22,6 +22,7 @@ T01文字、T02推导、T03代码与说明、T04均值公式与实现进入开�
 | dev/T01—T04/ | 可公开提交的自建Rmd材料 |
 | ../scripts/validation-tools.R | 清单校验、标注核对、批量运行及实验快照 |
 | ../scripts/validation-localization.R | 按侧、按方法评价复制来源位置；对重叠位置取并集 |
+| ../scripts/validation-decisions.R | 开发候选三状态的分标签、分变体统计；缺失材料不进入分母 |
 | ../scripts/run-validation.R | 从仓库根目录运行开发实验的入口 |
 | ../tests/test-validation.R | 清单隔离、错误标注及基础行为回归检查 |
 
@@ -46,11 +47,12 @@ quote必须与该位置的原文完全一致；脚本逐条核对，防止编辑
 实验输出到已忽略的reports-local/validation/：
 - results.csv：每对的分项状态、错误、Jaccard、双向覆盖、公式序列数量；NA保留不适用或失败情况。
 - localization.csv：两侧、三种方法各自的可比较数量、来源标注数量、预测数量、TP/FP/FN、定位precision/recall及状态。
+- decision-summary.csv：开发候选三状态的数量、待补数量及描述性比例，详见下文；没有独立答案时误报率为NA。
 - input-and-code-hashes.csv：清单、输入、运行脚本及引擎文件的MD5指纹，用于复现实验，不作为安全签名。
 - experiment.rds：清单快照、完整分项结果、实际参数、R/sessionInfo、UTC时间及可取得的Git提交。
 
 readRDS("reports-local/validation/experiment.rds")可在R中查看完整快照。
-重复运行会覆盖上述四个文件，需保留某次实验时先复制整个输出目录。
+重复运行会覆盖上述五个文件，需保留某次实验时先复制整个输出目录。RDS的schema_version为3，新增decision_summary并保留完整逐对结果。
 工作区未提交修改会改变文件指纹，因此不能仅凭commit判断实验代码完全一致。
 运行不编译输入Rmd，不执行其代码，不联网安装包。配置CSV仅按数据读取。
 
@@ -61,8 +63,33 @@ readRDS("reports-local/validation/experiment.rds")可在R中查看完整快照�
 独立答案需记录实际作者或采集方式，并确保作答时没有查看源答案；不得将AI或人工改写冒充独立完成。
 pending行不会运行。材料就绪时补齐来源、标签、两侧路径和必要标注，再将状态改为ready，并同步相应测试。
 
-后续：补齐开发变体与真正独立作答、核查公共题干/短常规内容、定义跨方法去重规则及定位评价，再开发综合判定。
-规则冻结后另行设计一次性保留评估；当前20对复制样例不能用于估计分类误报或均衡选择判定阈值。
+已完成既有证据去重、定位评价和未标定三状态开发试判。后续补更有代表性的开发材料与真正独立作答，检查误报、漏检与证据不足，再冻结规则并进行一次性保留评估。
+当前20对短复制样例不能用于估计分类误报或均衡选择判定阈值。
+
+## 三状态开发验证汇总
+
+decision-summary.csv按scope=all（全部开发材料）及各variant分组；label分别为copied与independent。
+planned、evaluated、pending依次是计划名额、实际运行对数和待补数量。pending中unassigned的名额仅按变体归入计划类别，不作为已审核真值，不进入任何比例分母。保留组和边界控制均不进入此表。
+suspected、no_clear_evidence、insufficient_evidence三列的数量相加等于evaluated。decision_errors单列记录判定程序失败，是insufficient_evidence的子集，不能重复相加。
+
+| 比例列 | 分子 / 分母 |
+|---|---|
+| detection_rate | 复制材料中候选疑似数 / 已运行复制对数 |
+| clear_miss_rate | 复制材料中候选未检出数 / 已运行复制对数 |
+| false_alarm_rate | 独立材料中候选疑似数 / 已运行独立对数 |
+| abstention_rate | 当前标签中证据不足数 / 该标签已运行对数 |
+
+证据不足保留在分母内，不能通过只计算有明确结论的样例来提高比例。clear_miss_rate只记录明确未检出；未被触发为疑似的复制材料还包括证据不足，两列必须同时查看。
+分母为0或该比例不适用于当前标签时为NA。每对材料权重相同，同一任务的多个派生变体并非独立抽样，比例只描述当前登记材料，不能推断真实作业表现或置信区间。不输出总体accuracy、F1或抄袭概率。
+统计拒绝漏行、重复ID、错配标签、混合规则版本以及将判定失败写成未检出。仍使用development_unvalidated阶段，正式verdict保持not_enabled。
+
+初始development-v1在现有20对基础派生样例上的观察：疑似0、未检出0、证据不足20。复制触发比例0，证据不足比例1；独立材料0对，因此误报率NA。这暴露材料代表性及规则标定缺口，不证明具备可用检测能力，也不为提高命中率而直接降低门槛。
+
+在PowerShell中可查看全部及分变体统计：
+
+```powershell
+Import-Csv .\reports-local\validation\decision-summary.csv | Format-Table scope,label,evaluated,pending,suspected,no_clear_evidence,insufficient_evidence
+```
 
 ## 定位评价的单位与限制
 

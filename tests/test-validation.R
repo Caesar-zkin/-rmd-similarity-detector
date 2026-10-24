@@ -97,5 +97,65 @@ failed <- experiment$details$T01_exact; failed$modules$text$status <- "error"; f
 failed_loc <- evaluate_validation_localization(failed, manifest$annotations, "T01_exact")
 check(all(is.na(failed_loc$recall[failed_loc$method == "text"])), "failed module does not become a missed detection")
 check(identical(saved$localization, experiment$localization), "localization snapshot round trip")
+
+# Hand-calculated outcomes test accounting, not detection performance.
+registry <- data.frame(pair_id = paste0("P", 1:9), split = c(rep("dev", 8), "holdout"),
+  variant = c(rep("exact", 4), rep("independent", 4), "exact"),
+  label = c(rep("copied", 4), rep("independent", 4), "copied"),
+  status = c(rep("ready", 7), "pending", "pending"), stringsAsFactors = FALSE)
+observations <- data.frame(pair_id = paste0("P", 1:7), label = registry$label[1:7],
+  candidate_verdict = c("suspected", "no_clear_evidence", "insufficient_evidence",
+    "insufficient_evidence", "suspected", "no_clear_evidence", "insufficient_evidence"),
+  decision_status = c("ok", "ok", "ok", "error", "ok", "ok", "ok"),
+  rule_version = "hand-check-v1", decision_stage = "development_unvalidated",
+  stringsAsFactors = FALSE)
+summary <- summarize_validation_decisions(registry, observations)
+copied <- summary[summary$scope == "all" & summary$label == "copied", ]
+independent <- summary[summary$scope == "all" & summary$label == "independent", ]
+check(copied$evaluated == 4L && copied$suspected == 1L && copied$no_clear_evidence == 1L &&
+  copied$insufficient_evidence == 2L, "three outcomes remain separate")
+check(copied$detection_rate == 0.25 && copied$clear_miss_rate == 0.25 && copied$abstention_rate == 0.5,
+  "copied rates include abstentions in denominator")
+check(copied$decision_errors == 1L, "decision failure is counted inside abstention")
+check(independent$planned == 4L && independent$evaluated == 3L && independent$pending == 1L,
+  "pending answer excluded from observed denominator")
+check(isTRUE(all.equal(independent$false_alarm_rate, 1/3)), "hand-calculated false alarm rate")
+check(is.na(copied$false_alarm_rate) && is.na(independent$detection_rate), "wrong-class rates remain NA")
+check(sum(summary$evaluated[summary$scope == "all"]) == 7L, "holdout slot never enters summary")
+check(identical(summary, summarize_validation_decisions(registry, observations[7:1, ])),
+  "join by ID rather than result row order")
+check(all(summary$suspected + summary$no_clear_evidence + summary$insufficient_evidence == summary$evaluated),
+  "outcomes partition every evaluated group")
+bad <- observations; bad$label[1L] <- "independent"
+check(fails(function() summarize_validation_decisions(registry, bad)), "mismatched truth rejected")
+bad <- observations; bad$candidate_verdict[4L] <- "no_clear_evidence"
+check(fails(function() summarize_validation_decisions(registry, bad)), "failed decision cannot count as clear")
+bad <- observations; bad$rule_version[1L] <- "other"
+check(fails(function() summarize_validation_decisions(registry, bad)), "mixed rules rejected")
+bad <- observations; bad$decision_stage[1L] <- "validated"
+check(fails(function() summarize_validation_decisions(registry, bad)), "unverified stage rejected")
+check(fails(function() summarize_validation_decisions(registry, observations[-1L, ])), "missing ready result rejected")
+check(fails(function() summarize_validation_decisions(registry, rbind(observations, observations[1L, ]))),
+  "duplicate result rejected")
+bad <- observations; bad$pair_id[1L] <- "P9"
+check(fails(function() summarize_validation_decisions(registry, bad)), "holdout result rejected")
+bad <- observations; bad$candidate_verdict[1L] <- NA_character_
+check(fails(function() summarize_validation_decisions(registry, bad)), "missing outcome rejected")
+bad <- observations; bad$candidate_verdict[1L] <- "unsupported"
+check(fails(function() summarize_validation_decisions(registry, bad)), "unknown outcome rejected")
+bad_registry <- registry; bad_registry$pair_id[2L] <- "P1"
+check(fails(function() summarize_validation_decisions(bad_registry, observations)), "duplicate registry ID rejected")
+none <- registry; none$status <- "pending"
+empty <- summarize_validation_decisions(none, observations[FALSE, ])
+check(all(empty$evaluated == 0L) && all(is.na(empty$abstention_rate)), "empty experiment has undefined rates")
+check(all(empty$pending[empty$scope == "all"] == 4L), "empty experiment retains pending counts")
+check(identical(saved$decision_summary, experiment$decision_summary), "decision summary snapshot round trip")
+check(file.exists(file.path(tmp, "results/decision-summary.csv")), "decision summary CSV written")
+actual <- saved$decision_summary[saved$decision_summary$scope == "all", ]
+check(actual$evaluated[actual$label == "copied"] == 20L, "all registered copied observations accounted for")
+check(actual$evaluated[actual$label == "independent"] == 0L &&
+  is.na(actual$false_alarm_rate[actual$label == "independent"]), "missing independent answers do not imply zero false alarms")
+check(actual$pending[actual$label == "independent"] == 4L, "four genuine answers still pending")
+check(all(saved$results$decision_stage == "development_unvalidated"), "candidate summaries retain unvalidated stage")
 unlink(tmp, recursive = TRUE)
 cat("All", checks, "validation-pipeline assertions passed.\n")
