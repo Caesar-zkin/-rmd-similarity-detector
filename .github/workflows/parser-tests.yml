@@ -74,3 +74,9 @@ jobs:
 
       - name: Run code foundation demonstration
         run: Rscript examples/run-code-demo.R
+
+      - name: Run code local matching tests
+        run: Rscript tests/test-code-local.R
+
+      - name: Run code local demonstration
+        run: Rscript examples/run-code-local-demo.R

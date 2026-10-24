@@ -12,7 +12,7 @@ srcfile来自内存text，不使用作业里的路径。
 - https://stat.ethz.ch/R-manual/R-devel/library/base/html/parse.html
 - https://stat.ethz.ch/R-manual/R-devel/library/utils/html/getParseData.html
 
-当前按完整单元比较，不跨代码块建立映射；长块窗口、局部编辑对齐、代码覆盖率和最终判定待实现。
+compare_code_pair仍按完整单元比较；新增analyze_code_pair_local支持单元内顶层语句窗口、受限语句插删及token覆盖。不跨代码块建立映射，最终判定待实现。
 
 ## 词法与位置
 
@@ -70,7 +70,7 @@ token_count为两侧当前词法单元数的较小值，是描述量，尚不是
 整体状态limited优先；任一侧没有代码为not_applicable；存在空/纯注释单元为insufficient_content；其余ok。
 ok或零匹配都不是抄袭结论。
 
-默认每段最多100000字符、20000终结token、50000语法节点；
+默认每段最多100000字符、20000终结token、50000语法节点和2000顶层语句；
 每侧最多500单元及1000000代码字符；最多10000单元对。
 max_pair_chars=5000000限制两侧代码字符数乘对侧单元数之和，控制整个比较规模。
 超限报错，不静默截断；解析器自身语法/深度错误标受限并保留诊断。
@@ -83,4 +83,81 @@ Rscript examples/run-code-demo.R
 Rscript examples/run-code-demo.R A.Rmd B.Rmd
 
 默认例子仅改名values→nums、center→avg并调整空白，原始/词法层不同，改名层相同。
-仅为功能验证；没有检测准确率、代码覆盖率或最终抄袭结论。
+仅为功能验证；完整单元接口不提供代码覆盖率或最终抄袭结论。
+
+## 顶层语句与局部接口
+
+加载顺序parser.R → code.R → code-local.R。
+prepare_code_statements(doc, max_statements=2000L)从成功解析且位置已验证的代码单元中提取顶层语句。
+tokenize_r_code额外返回statements及statement_status。每个根语法节点覆盖其完整终结token集合，要求所有有效token恰好归属一个语句。
+提取失败标受限，不把平铺token串当作语句。函数、循环和条件内部不独立拆步；复杂整体语句仍可作词法比较。
+
+语句表保留文件、单元、statement_id、原文、token数、行号、tokens及允许改名的位置。
+语句key保留自身语法父节点关系，重新编号后不受前面无关语句的节点编号影响。
+改名候选仍由整个原代码单元的保守规则决定，但局部匹配只对实际对齐部分建立映射，不沿用全文的变量编号。
+
+analyze_code_pair_local(doc_a, doc_b)返回语句、窗口、候选、局部结果、两种覆盖、诊断及参数。
+原完整单元接口和注释补充接口不改变；局部结果本身不新增独立注释证据。
+
+## 窗口、种子和有序匹配
+
+默认window_tokens=100、window_statements=20。窗口不切断语句，不跨代码单元。
+逐个装入完整语句，下一条会超过token目标或语句上限时结束；按当前窗口语句数的一半（向下取整，至少1）前进，尾部覆盖。
+这是约一半语句重叠，不保证恰好一半token重叠。
+单个语句超过token目标时仍完整保留并标oversize；受原解析规模及局部token工作量上限约束。
+
+候选分lexical与renamed两种模式，以至少共享一个完整语句key筛选窗口对。
+lexical要求语法词法key相同；renamed要求固定词法结构相同、可改名位置一致，再逐token验证一一映射。
+函数、参数、成员、外部输入、数字和字符串沿用基础接口的保留规则。
+
+对候选窗口内任意起点进行顺序扩展，映射贯穿整个路径，不能逐句重置。
+默认max_skips=1约束两侧合计的内部跳过语句数。只跳过完整语句，不在单个语句内作任意编辑。
+替换一条语句可在max_skips>=2时表现为两侧各跳过一条，改动语句的全部token不计匹配。
+路径至少满足min_tokens=20及min_statements=1，均为未标定的候选参数，不是抄袭阈值。
+开头结尾的未匹配语句不算内部跳步。
+
+只输出当前窗口内不能继续扩展的达标路径；相同位置对路径去重，再移除同一方法下被更长路径包含的结果。
+全程原词法相同的改名路径不重复输出为renamed。
+不同位置对齐保留；lexical短片段可以同时落在更长renamed片段中，覆盖阶段再次去重。
+超过窗口范围的长复制可能拆成重叠证据，不保证枚举所有局部复制。
+
+## 局部证据与token覆盖
+
+matches包括method、matched_statements、matched_tokens、skipped_statements、skipped_tokens、alignment_ratio及行号。
+alignment_ratio = 匹配token对数 / (匹配token对数 + 两侧跳过语句的token总数)。
+未匹配前后缀不在该局部比例分母内；比例不表示整篇覆盖或抄袭概率。
+statement_pairs列出逐句原文、ID及行号；variable_map为整段实际匹配的变量对应。
+token_starts_a/b与token_ends_a/b是每个被匹配token的实际全局起止字符位置；
+skipped_statements_a/b列出跳过语句ID，可在statements_a/b查原文。
+
+lexical_coverage只汇总原词法相同的结果；coverage还包括通过一致改名建立的token对应。
+两侧分别以token起点集合去重；分母是成功完整解析单元的全部有效token，包括短单元和未匹配语句。
+COMMENT、分号和空白不计分母。语法失败/边界受限区域不能算成已成功比较，整体诊断保留。
+重复窗口、重复对齐及两种方法的同一源token都只计一次，不填补跳过语句或整行范围。
+分母为0返回NA；有可比较token但无达标结果为0，不是无抄袭结论。
+
+包含改名的coverage统计结构对应token：变量字符可不同、长度可不同。
+它不是文字模块的相同字符覆盖，也不是语义等价比例；不能与文字字符数或公式步骤数直接相加。
+
+默认演示A有27个可比较token，B有23个；匹配3句共20token，B内部跳过3token：
+lexical覆盖均0；包含改名覆盖分别20/27与20/23，局部alignment_ratio=20/23。
+映射values→nums、center→avg。前后缀、插入语句都不计入匹配。
+
+## 局部规模与边界
+
+每侧总语句max_statements=2000、max_windows=500，window_statements最多20以限制搜索深度。
+候选max_candidates=500、共享key展开前max_seed_pairs=100000。
+max_states=50000限制所有已有映射下的语句配对尝试；
+max_token_work=5000000按每次尝试两侧token数较大者累加。
+max_results=1000限制去重后的终止路径数（移除包含结果前）。
+所有超限明确报错，不截断成低覆盖或部分完成。
+基础解析器每单元上限继续生效，增大全局参数不取消单元上限。
+
+未知调用/复杂作用域可作lexical匹配，整体状态limited；语法失败或非R单元不进入局部步骤。
+缺少代码为not_applicable，缺少可用语句为insufficient_content，其余ok（limited优先）。
+ok不保证覆盖整个文件；短于门槛的结果可能被过滤。
+单条长表达式、函数/循环内部的局部复制、任意token替换、跨代码块映射及算法重构不在本批保证范围。
+测试为自建功能验证，性能与阈值尚未标定。
+
+运行Rscript tests/test-code-local.R和Rscript examples/run-code-local-demo.R。
+演示也接受两份Rmd路径；不执行待检测代码、不输出最终抄袭结论。

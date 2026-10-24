@@ -11,19 +11,21 @@ code_positive_integer <- function(x, name) {
   start_line = integer(), start_column = integer(), end_line = integer(), end_column = integer(),
   stringsAsFactors = FALSE)
 
-tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_nodes = 50000L) {
+tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_nodes = 50000L, max_statements = 2000L) {
   if (!is.character(code) || length(code) != 1L || is.na(code))
     stop("code must be one non-missing character string.")
   max_chars <- code_positive_integer(max_chars, "max_chars")
   max_tokens <- code_positive_integer(max_tokens, "max_tokens")
   max_nodes <- code_positive_integer(max_nodes, "max_nodes")
+  max_statements <- code_positive_integer(max_statements, "max_statements")
   code <- gsub("\r\n?", "\n", enc2utf8(code), perl = TRUE)
   chars <- strsplit(code, "", fixed = TRUE)[[1L]]; n <- length(chars)
   if (n > max_chars) stop("Code character limit exceeded.")
   result <- list(source = code, tokens = .empty_code_tokens(), token_count = 0L,
     normalized_key = NA_character_, renamed_key = NA_character_,
     variable_map = data.frame(name = character(), canonical = character()),
-    status = "limited", parse_status = "error", rename_status = "unavailable", issues = character())
+    status = "limited", parse_status = "error", rename_status = "unavailable", issues = character(),
+    statements = list(), statement_status = "unavailable")
   # Do not interpret submitted source-location directives or follow their filenames.
   if (grepl("(?m)^[ \t]*#line[ \t]+", code, perl = TRUE)) {
     result$parse_status <- "limited"; result$issues <- "unsupported_line_directive"; return(result)
@@ -35,7 +37,8 @@ tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_
   pd <- utils::getParseData(parsed, includeText = FALSE)
   result$parse_status <- "ok"
   if (is.null(pd) || !nrow(pd)) {
-    result$status <- "empty"; result$rename_status <- "not_applicable"; return(result)
+    result$status <- "empty"; result$rename_status <- "not_applicable"
+    result$statement_status <- "not_applicable"; return(result)
   }
   if (nrow(pd) > max_nodes) stop("Code parse node limit exceeded.")
   terminal <- pd[pd$terminal, , drop = FALSE]
@@ -68,7 +71,8 @@ tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_
   included <- pd[!pd$terminal | !pd$id %in% terminal$id[ignored], , drop = FALSE]
   result$token_count <- as.integer(sum(!ignored))
   if (!result$token_count) {
-    result$status <- "empty"; result$rename_status <- "not_applicable"; return(result)
+    result$status <- "empty"; result$rename_status <- "not_applicable"
+    result$statement_status <- "not_applicable"; return(result)
   }
   node_parent <- match(included$parent, included$id, nomatch = 0L)
   values <- rep("", nrow(included))
@@ -136,6 +140,7 @@ tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_
   member <- rep(FALSE, nrow(terminal))
   syntax <- which(terminal$token != "COMMENT")
   if (length(syntax) > 1L) member[syntax[-1L]] <- literal[head(syntax, -1L)] %in% c("$", "@")
+  eligible <- rep(FALSE, nrow(included))
   if (!length(issues)) {
     replaced <- values
     eligible <- included$terminal & included$token == "SYMBOL"
@@ -149,6 +154,34 @@ tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_
     result$rename_status <- "restricted"; result$status <- "limited"
   }
   result$issues <- unique(issues)
+  roots <- included[!included$terminal & included$parent == 0L, , drop = FALSE]
+  if (nrow(roots) > max_statements) stop("Code statement count limit exceeded.")
+  covered <- integer(nrow(terminal)); statements <- list()
+  for (i in seq_len(nrow(roots))) {
+    root <- roots[i, , drop = FALSE]
+    within <- function(rows) (rows$line1 > root$line1 | (rows$line1 == root$line1 & rows$col1 >= root$col1)) &
+      (rows$line2 < root$line2 | (rows$line2 == root$line2 & rows$col2 <= root$col2))
+    token_rows <- which(within(terminal) & !ignored)
+    if (!length(token_rows)) next
+    node_rows <- which(within(included))
+    nodes <- included[node_rows, , drop = FALSE]
+    parents <- match(nodes$parent, nodes$id, nomatch = 0L)
+    key <- function(v) .code_key(paste(nodes$token, parents, v, sep = "\001"))
+    shape <- values[node_rows]
+    shape[eligible[node_rows]] <- "@renameable"
+    covered[token_rows] <- covered[token_rows] + 1L
+    statements[[length(statements) + 1L]] <- list(token_rows = as.integer(token_rows),
+      content = substring(code, starts[token_rows[1L]], ends[tail(token_rows, 1L)]),
+      normalized_key = key(values[node_rows]),
+      shape_key = if (result$rename_status == "ok") key(shape) else NA_character_,
+      rename_eligible = eligible[match(terminal$id[token_rows], included$id)])
+  }
+  if (!length(statements) || any(covered[!ignored] != 1L)) {
+    result$status <- "limited"; result$statement_status <- "unavailable"
+    result$issues <- unique(c(result$issues, "statement_extraction_failed"))
+  } else {
+    result$statements <- statements; result$statement_status <- "ok"
+  }
   result
 }
 
