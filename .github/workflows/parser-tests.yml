@@ -93,6 +93,9 @@ jobs:
       - name: Run registered development experiment
         run: Rscript scripts/run-validation.R
 
+      - name: Run longer development material checks
+        run: Rscript tests/test-extended-validation.R
+
       - name: Run boundary control tests
         run: Rscript tests/test-boundary.R
 

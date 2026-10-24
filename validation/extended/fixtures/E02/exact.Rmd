@@ -1,0 +1,20 @@
+---
+title: "E02 exact"
+output: html_document
+---
+
+# Analysis
+
+设n为正整数。最小化观测值到同一个中心的平方距离和。
+
+$$
+\begin{aligned}
+Q(c) &= \sum_{i=1}^{n}(x_i-c)^2 \\
+Q(c) &= \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2 \\
+Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc \\
+0 &= -2\sum_{i=1}^{n}x_i+2nc \\
+c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+\end{aligned}
+$$
+
+二阶导数为2n且大于零，因此得到唯一的最小值点。

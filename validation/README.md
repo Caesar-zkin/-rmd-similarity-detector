@@ -117,3 +117,9 @@ Import-Csv .\reports-local\validation\decision-summary.csv | Format-Table scope,
 
 independent-tasks.md是可单独交给未见过源答案者的任务单，independent-collection.md说明匿名采集及来源审核，另有空白Rmd和登记CSV模板。
 真实材料存放已忽略的validation/independent-local/；当前批量脚本不会读取它们，公开独立答案名额继续pending。尚未实际收集独立答案。
+
+## 加长开发补充材料
+
+extended/单独登记3个源家族、12对派生控制，包含完整分析段落、五步推导及十二句R代码的原样、排版、轻改和局部版本。
+沿用现有检测方法与默认规则，单独输出候选三状态、定位与完整实验记录；不修改原36个名额，不冒充人类独立答案或保留材料，不混算总体准确率。
+运行scripts/run-extended-validation.R，详见extended/README.md。

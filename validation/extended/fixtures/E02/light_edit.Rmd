@@ -1,0 +1,17 @@
+---
+title: "E02 light_edit"
+output: html_document
+---
+
+# Analysis
+
+$$
+\begin{aligned}
+Q(d) &= \sum_{i=1}^{n}(y_i-d)^2 \\
+Q(d) &= \sum_{i=1}^{n}y_i^2-2d\sum_{i=1}^{n}y_i+nd^2 \\
+Q(0) &= \sum_{i=1}^{n}y_i^2 \\
+Q'(d) &= -2\sum_{i=1}^{n}y_i+2nd \\
+0 &= -2\sum_{i=1}^{n}y_i+2nd \\
+d &= \frac{1}{n}\sum_{i=1}^{n}y_i
+\end{aligned}
+$$

@@ -1,0 +1,21 @@
+---
+title: "E03 format"
+output: html_document
+---
+
+# Analysis
+
+```{r}
+  values <- c(12, 15, 18, 20, 21, 23, 25, 26)  # layout only
+  size <- length(values)  # layout only
+  center <- mean(values)  # layout only
+  deviations <- values - center  # layout only
+  squares <- deviations ^ 2  # layout only
+  sum_squares <- sum(squares)  # layout only
+  sample_variance <- sum_squares / (size - 1)  # layout only
+  sample_sd <- sqrt(sample_variance)  # layout only
+  standard_error <- sample_sd / sqrt(size)  # layout only
+  rounded_center <- round(center, 2)  # layout only
+  print(rounded_center)  # layout only
+  print(standard_error)  # layout only
+```

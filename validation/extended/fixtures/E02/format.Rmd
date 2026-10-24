@@ -1,0 +1,26 @@
+---
+title: "E02 format"
+output: html_document
+---
+
+# Analysis
+
+$$
+Q(c) = \sum_{i=1}^{n}(x_i-c)^2
+$$
+
+$$
+Q(c) = \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+$$
+
+$$
+Q'(c) = -2\sum_{i=1}^{n}x_i+2nc
+$$
+
+$$
+0 = -2\sum_{i=1}^{n}x_i+2nc
+$$
+
+$$
+c = \frac{1}{n}\sum_{i=1}^{n}x_i
+$$

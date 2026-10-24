@@ -1,0 +1,19 @@
+---
+title: "E03 local"
+output: html_document
+---
+
+# Analysis
+
+Only the initial data preparation and squared deviations are reused.
+
+```{r}
+values <- c(12, 15, 18, 20, 21, 23, 25, 26)
+size <- length(values)
+center <- mean(values)
+deviations <- values - center
+squares <- deviations ^ 2
+sum_squares <- sum(squares)
+```
+
+The variance estimate and uncertainty calculation are not included in this excerpt.

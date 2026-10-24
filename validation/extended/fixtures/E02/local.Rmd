@@ -1,0 +1,20 @@
+---
+title: "E02 local"
+output: html_document
+---
+
+# Analysis
+
+Only the stationary-point part of the argument is reused below.
+
+$$
+Q'(c) = -2\sum_{i=1}^{n}x_i+2nc
+$$
+
+$$
+0 = -2\sum_{i=1}^{n}x_i+2nc
+$$
+
+$$
+c = \frac{1}{n}\sum_{i=1}^{n}x_i
+$$

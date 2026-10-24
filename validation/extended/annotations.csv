@@ -1,0 +1,141 @@
+pair_id,side,kind,start,end,quote
+E01_exact,A,text,64,200,拿到这组连续测量值后，我先核对记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。
+E01_exact,A,text,203,336,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_exact,A,text,339,479,描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论首先描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。
+E01_exact,B,text,63,199,拿到这组连续测量值后，我先核对记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。
+E01_exact,B,text,202,335,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_exact,B,text,338,478,描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论首先描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。
+E01_format,A,text,64,200,拿到这组连续测量值后，我先核对记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。
+E01_format,A,text,203,336,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_format,A,text,339,479,描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论首先描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。
+E01_format,B,text,64,206,> **拿到这组连续测量值后，我先核对记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。**
+E01_format,B,text,209,348,> **描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。**
+E01_format,B,text,351,497,> **描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论首先描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。**
+E01_light_edit,A,text,64,200,拿到这组连续测量值后，我先核对记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。
+E01_light_edit,A,text,203,336,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_light_edit,A,text,339,479,描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论首先描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。
+E01_light_edit,B,text,68,204,拿到这组连续测量值后，我先检查记录单位、观测顺序和缺失标记，再检查是否存在明显不可能的取值。数值很大并不自动意味着录入错误，只有结合测量过程才能决定是否修正。若直接删除所有极端点，可能把真实波动一起删掉，因此我会先保留原始数据，并把任何处理步骤写进分析记录，便于其他人复核。
+E01_light_edit,B,text,207,340,描述中心位置时，我一起查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_light_edit,B,text,343,483,描述离散程度时，我报告样本标准差，并说明它使用的单位与原始观测相同。随后结合直方图观察集中区域和尾部形态，检查是否存在分组混合的可能。这里的结论主要描述已经观测到的样本；如果抽样过程不具代表性，即使样本量增加，也不能直接保证对总体的推断可靠。报告中需要把描述性结论与总体推断区分开。
+E01_local,A,text,203,336,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E01_local,B,text,166,299,描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+E02_exact,A,math,111,141,Q(c) &= \sum_{i=1}^{n}(x_i-c)^2
+E02_exact,A,math,146,197,Q(c) &= \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+E02_exact,A,math,202,233,Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc
+E02_exact,A,math,238,265,0 &= -2\sum_{i=1}^{n}x_i+2nc
+E02_exact,A,math,270,302,c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_exact,B,math,110,140,Q(c) &= \sum_{i=1}^{n}(x_i-c)^2
+E02_exact,B,math,145,196,Q(c) &= \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+E02_exact,B,math,201,232,Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc
+E02_exact,B,math,237,264,0 &= -2\sum_{i=1}^{n}x_i+2nc
+E02_exact,B,math,269,301,c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_format,A,math,111,141,Q(c) &= \sum_{i=1}^{n}(x_i-c)^2
+E02_format,A,math,146,197,Q(c) &= \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+E02_format,A,math,202,233,Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc
+E02_format,A,math,238,265,0 &= -2\sum_{i=1}^{n}x_i+2nc
+E02_format,A,math,270,302,c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_format,B,math,67,96,Q(c) = \sum_{i=1}^{n}(x_i-c)^2
+E02_format,B,math,105,155,Q(c) = \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+E02_format,B,math,164,194,Q'(c) = -2\sum_{i=1}^{n}x_i+2nc
+E02_format,B,math,203,229,0 = -2\sum_{i=1}^{n}x_i+2nc
+E02_format,B,math,238,269,c = \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_light_edit,A,math,111,141,Q(c) &= \sum_{i=1}^{n}(x_i-c)^2
+E02_light_edit,A,math,146,197,Q(c) &= \sum_{i=1}^{n}x_i^2-2c\sum_{i=1}^{n}x_i+nc^2
+E02_light_edit,A,math,202,233,Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc
+E02_light_edit,A,math,238,265,0 &= -2\sum_{i=1}^{n}x_i+2nc
+E02_light_edit,A,math,270,302,c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_light_edit,B,math,87,117,Q(d) &= \sum_{i=1}^{n}(y_i-d)^2
+E02_light_edit,B,math,122,173,Q(d) &= \sum_{i=1}^{n}y_i^2-2d\sum_{i=1}^{n}y_i+nd^2
+E02_light_edit,B,math,209,240,Q'(d) &= -2\sum_{i=1}^{n}y_i+2nd
+E02_light_edit,B,math,245,272,0 &= -2\sum_{i=1}^{n}y_i+2nd
+E02_light_edit,B,math,277,309,d &= \frac{1}{n}\sum_{i=1}^{n}y_i
+E02_local,A,math,202,233,Q'(c) &= -2\sum_{i=1}^{n}x_i+2nc
+E02_local,A,math,238,265,0 &= -2\sum_{i=1}^{n}x_i+2nc
+E02_local,A,math,270,302,c &= \frac{1}{n}\sum_{i=1}^{n}x_i
+E02_local,B,math,131,161,Q'(c) = -2\sum_{i=1}^{n}x_i+2nc
+E02_local,B,math,170,196,0 = -2\sum_{i=1}^{n}x_i+2nc
+E02_local,B,math,205,236,c = \frac{1}{n}\sum_{i=1}^{n}x_i
+E03_exact,A,code,100,142,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_exact,A,code,144,165,size <- length(values)
+E03_exact,A,code,167,188,center <- mean(values)
+E03_exact,A,code,190,218,deviations <- values - center
+E03_exact,A,code,220,244,squares <- deviations ^ 2
+E03_exact,A,code,246,272,sum_squares <- sum(squares)
+E03_exact,A,code,274,316,sample_variance <- sum_squares / (size - 1)
+E03_exact,A,code,318,351,sample_sd <- sqrt(sample_variance)
+E03_exact,A,code,353,392,standard_error <- sample_sd / sqrt(size)
+E03_exact,A,code,394,427,"rounded_center <- round(center, 2)"
+E03_exact,A,code,429,449,print(rounded_center)
+E03_exact,A,code,451,471,print(standard_error)
+E03_exact,B,code,99,141,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_exact,B,code,143,164,size <- length(values)
+E03_exact,B,code,166,187,center <- mean(values)
+E03_exact,B,code,189,217,deviations <- values - center
+E03_exact,B,code,219,243,squares <- deviations ^ 2
+E03_exact,B,code,245,271,sum_squares <- sum(squares)
+E03_exact,B,code,273,315,sample_variance <- sum_squares / (size - 1)
+E03_exact,B,code,317,350,sample_sd <- sqrt(sample_variance)
+E03_exact,B,code,352,391,standard_error <- sample_sd / sqrt(size)
+E03_exact,B,code,393,426,"rounded_center <- round(center, 2)"
+E03_exact,B,code,428,448,print(rounded_center)
+E03_exact,B,code,450,470,print(standard_error)
+E03_format,A,code,100,142,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_format,A,code,144,165,size <- length(values)
+E03_format,A,code,167,188,center <- mean(values)
+E03_format,A,code,190,218,deviations <- values - center
+E03_format,A,code,220,244,squares <- deviations ^ 2
+E03_format,A,code,246,272,sum_squares <- sum(squares)
+E03_format,A,code,274,316,sample_variance <- sum_squares / (size - 1)
+E03_format,A,code,318,351,sample_sd <- sqrt(sample_variance)
+E03_format,A,code,353,392,standard_error <- sample_sd / sqrt(size)
+E03_format,A,code,394,427,"rounded_center <- round(center, 2)"
+E03_format,A,code,429,449,print(rounded_center)
+E03_format,A,code,451,471,print(standard_error)
+E03_format,B,code,71,130,"  values <- c(12, 15, 18, 20, 21, 23, 25, 26)  # layout only"
+E03_format,B,code,132,170,  size <- length(values)  # layout only
+E03_format,B,code,172,210,  center <- mean(values)  # layout only
+E03_format,B,code,212,257,  deviations <- values - center  # layout only
+E03_format,B,code,259,300,  squares <- deviations ^ 2  # layout only
+E03_format,B,code,302,345,  sum_squares <- sum(squares)  # layout only
+E03_format,B,code,347,406,  sample_variance <- sum_squares / (size - 1)  # layout only
+E03_format,B,code,408,458,  sample_sd <- sqrt(sample_variance)  # layout only
+E03_format,B,code,460,516,  standard_error <- sample_sd / sqrt(size)  # layout only
+E03_format,B,code,518,568,"  rounded_center <- round(center, 2)  # layout only"
+E03_format,B,code,570,607,  print(rounded_center)  # layout only
+E03_format,B,code,609,646,  print(standard_error)  # layout only
+E03_light_edit,A,code,100,142,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_light_edit,A,code,144,165,size <- length(values)
+E03_light_edit,A,code,167,188,center <- mean(values)
+E03_light_edit,A,code,190,218,deviations <- values - center
+E03_light_edit,A,code,220,244,squares <- deviations ^ 2
+E03_light_edit,A,code,246,272,sum_squares <- sum(squares)
+E03_light_edit,A,code,274,316,sample_variance <- sum_squares / (size - 1)
+E03_light_edit,A,code,318,351,sample_sd <- sqrt(sample_variance)
+E03_light_edit,A,code,353,392,standard_error <- sample_sd / sqrt(size)
+E03_light_edit,A,code,394,427,"rounded_center <- round(center, 2)"
+E03_light_edit,A,code,429,449,print(rounded_center)
+E03_light_edit,A,code,451,471,print(standard_error)
+E03_light_edit,B,code,75,115,"nums <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_light_edit,B,code,117,137,count <- length(nums)
+E03_light_edit,B,code,139,159,average <- mean(nums)
+E03_light_edit,B,code,181,205,offsets <- nums - average
+E03_light_edit,B,code,207,227,powers <- offsets ^ 2
+E03_light_edit,B,code,229,248,total <- sum(powers)
+E03_light_edit,B,code,250,278,spread <- total / (count - 1)
+E03_light_edit,B,code,280,300,scale <- sqrt(spread)
+E03_light_edit,B,code,302,335,uncertainty <- scale / sqrt(count)
+E03_light_edit,B,code,337,366,"displayed <- round(average, 2)"
+E03_light_edit,B,code,368,383,print(displayed)
+E03_light_edit,B,code,385,402,print(uncertainty)
+E03_local,A,code,100,142,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_local,A,code,144,165,size <- length(values)
+E03_local,A,code,167,188,center <- mean(values)
+E03_local,A,code,190,218,deviations <- values - center
+E03_local,A,code,220,244,squares <- deviations ^ 2
+E03_local,A,code,246,272,sum_squares <- sum(squares)
+E03_local,B,code,140,182,"values <- c(12, 15, 18, 20, 21, 23, 25, 26)"
+E03_local,B,code,184,205,size <- length(values)
+E03_local,B,code,207,228,center <- mean(values)
+E03_local,B,code,230,258,deviations <- values - center
+E03_local,B,code,260,284,squares <- deviations ^ 2
+E03_local,B,code,286,312,sum_squares <- sum(squares)
