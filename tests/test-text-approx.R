@@ -62,6 +62,13 @@ dup_a <- doc("甲乙丙丁戊己", "A")
 dup <- analyze_text_pair_approx(dup_a, dup_a, k = 2L, min_chars = 3L, seed_k = 2L)
 check(all(dup$coverage$coverage == 1) && all(dup$coverage$matched_chars == 6L), "exact and approximate overlap counted once")
 
+overlap_doc <- doc("甲乙丙丁戊己庚辛")
+overlap <- find_approximate_text_matches(overlap_doc, overlap_doc,
+  seed_k = 2L, window_size = 6L, min_chars = 4L)
+overlap_coverage <- summarize_text_coverage(overlap_doc, overlap_doc, overlap$matches)
+check(nrow(overlap$candidates) == 4L && nrow(overlap$matches) == 3L, "duplicate alignment from overlapping windows removed")
+check(all(overlap_coverage$coverage == 1) && all(overlap_coverage$matched_chars == 8L), "overlapping approximate windows cover characters once")
+
 unrelated <- analyze_text_pair_approx(doc("甲乙丙丁"), doc("天地玄黄"), k = 2L, min_chars = 2L, seed_k = 2L)
 check(unrelated$candidate_count == 0L && all(unrelated$coverage$coverage == 0), "no candidates yields zero supported coverage")
 empty <- analyze_text_pair_approx(doc("$x$"), doc("甲乙丙丁"), k = 2L, min_chars = 2L, seed_k = 2L)
@@ -73,7 +80,8 @@ warned <- analyze_text_pair_approx(doc("甲乙丙丁\n\n![图](x)"), doc("甲乙
 check(warned$status == "limited", "parser warnings propagated")
 
 # Traceback positions preserve both consumed spans and equal-character pairs.
-for (fixture in list(list(r, a, b), list(ins, ia, ib), list(dup, dup_a, dup_a))) {
+for (fixture in list(list(r, a, b), list(ins, ia, ib), list(dup, dup_a, dup_a),
+    list(list(approximate_matches = overlap$matches), overlap_doc, overlap_doc))) {
   matches <- fixture[[1L]]$approximate_matches
   for (i in seq_len(nrow(matches))) {
     pa <- matches$source_positions_a[[i]]; pb <- matches$source_positions_b[[i]]
