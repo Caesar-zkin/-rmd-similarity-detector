@@ -39,6 +39,7 @@ Rscript scripts/render-detector.R
 Rscript scripts/render-detector.R A.Rmd B.Rmd reports-local/my-report.html
 
 CLI相对路径基于当前工作目录，带空格路径应加引号。只允许html输出扩展名。
+独立CLI安装目录支持中文和空格；仅当原脚本路径不存在时，兼容Unix Rscript在--file中使用的~+~空格编码，不改写已存在的字面文件名。
 CLI将可信detector.Rmd复制到临时目录后编译，不另设intermediates_dir，结束后清理临时目录。
 这样避免rmarkdown在执行代码块前为复制资源而扫描原始Rmd，将隐藏引擎的R代码误交给Pandoc数学转换。
 待检测文件仍仅按绝对路径传入解析器，不复制为待编译文档。此修正不更改分析方法、参数或候选判定。

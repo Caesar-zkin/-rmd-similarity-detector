@@ -2,7 +2,14 @@
 args <- commandArgs(trailingOnly = TRUE)
 if (!length(args) %in% c(0L, 2L, 3L, 4L)) stop("Usage: Rscript scripts/render-detector.R [A.Rmd B.Rmd [report.html [exclusions.csv]]]")
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
-root <- dirname(dirname(normalizePath(sub("^--file=", "", script_arg[1L]), winslash = "/", mustWork = TRUE)))
+script_file <- sub("^--file=", "", script_arg[1L])
+# Unix Rscript may encode spaces in its --file argument as ~+~.
+# Preserve an existing literal path before trying that compatibility decoding.
+if (!file.exists(script_file)) {
+  decoded <- gsub("~+~", " ", script_file, fixed = TRUE)
+  if (file.exists(decoded)) script_file <- decoded
+}
+root <- dirname(dirname(normalizePath(script_file, winslash = "/", mustWork = TRUE)))
 if (!requireNamespace("rmarkdown", quietly = TRUE))
   stop("rmarkdown is not installed. Install it before offline detection: install.packages('rmarkdown')")
 if (.Platform$OS.type == "windows" && !nzchar(Sys.getenv("RSTUDIO_PANDOC"))) {
