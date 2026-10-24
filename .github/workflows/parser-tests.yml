@@ -99,6 +99,12 @@ jobs:
       - name: Run separate boundary observations
         run: Rscript scripts/run-boundary.R
 
+      - name: Run explicit exclusion tests
+        run: Rscript tests/test-exclusions.R
+
+      - name: Run explicit exclusion demonstration
+        run: Rscript examples/run-exclusion-demo.R
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |
@@ -114,8 +120,11 @@ jobs:
       - name: Render mixed demonstration with CLI
         run: Rscript scripts/render-detector.R
 
+      - name: Render public-prompt exclusion with CLI
+        run: Rscript scripts/render-detector.R validation/boundary/fixtures/B03/a.Rmd validation/boundary/fixtures/B03/b.Rmd reports-local/prompt-excluded.html examples/prompt-exclusions.csv
+
       - uses: actions/upload-artifact@v4
         with:
           name: evidence-report-${{ matrix.os }}
-          path: reports-local/detector-report.html
+          path: reports-local/*.html
           retention-days: 7

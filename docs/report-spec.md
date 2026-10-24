@@ -15,7 +15,7 @@ detector.Rmd接收两份Rmd路径，读取后运行文字、完整公式、公�
 
 - R/report.R：整合分析、捕获错误/警告、HTML转义及证据展示。
 - templates/detector-template.Rmd：可信报告模板、样式、输入和分析参数。
-- scripts/build-detector.R：按固定顺序内嵌9个R模块，生成detector.Rmd。
+- scripts/build-detector.R：按固定顺序内嵌10个R模块，生成detector.Rmd。
 - detector.Rmd：已提交的生成文件，包含所需函数，不依赖运行目录的R/。
 - scripts/render-detector.R：CLI编译助手。
 - examples/report-a.Rmd和report-b.Rmd：自建文字/多行公式/代码综合示例。
@@ -62,7 +62,7 @@ Pandoc缺失时安装/配置后重试。模板仅为HTML，不要求LaTeX/TinyTe
 
 本地报告包含作业内容，应保存在已忽略的reports-local/，不提交真实学生作业及报告。
 CI只使用仓库自建材料；CI安装编译依赖可联网，和本机离线检测分开。
-CI输出的示例HTML作为短期artifact，内容仅为自建综合示例。
+CI输出的示例HTML作为短期artifact，内容仅为自建综合示例及B03题干排除演示。
 
 ## 验证与未完成项
 
@@ -71,7 +71,7 @@ tests/test-render-report.R：将单个Rmd复制到无R/的临时目录，在中�
 检查关键证据、未启用判定状态、恶意输入不执行，最终HTML资源仅允许data:或页内引用。
 这些是结构及运行测试，不等于实际检测效果评价。
 
-最终判定、公共题干排除、公式覆盖、跨方法证据进一步合并、开发材料与保留集验证仍未完成。
+最终判定、自动公共来源识别、公式覆盖、跨方法证据进一步合并及开发/保留集效果评估仍未完成。明确标注的完整解析单元现可排除，详见exclusion-spec.md。
 未知语法、窗口/种子、保守改名及规模上限会限制召回；参数必须通过后续开发实验再冻结。
 
 格式依据：

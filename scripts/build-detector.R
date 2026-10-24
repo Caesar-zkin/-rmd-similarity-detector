@@ -1,6 +1,6 @@
 # Deterministic bundle; does not evaluate module code or install dependencies.
 detector_module_paths <- c("R/parser.R", "R/text.R", "R/text-matches.R", "R/text-approx.R",
-  "R/math.R", "R/math-sequences.R", "R/code.R", "R/code-local.R", "R/report.R")
+  "R/math.R", "R/math-sequences.R", "R/code.R", "R/code-local.R", "R/exclusions.R", "R/report.R")
 build_detector <- function(root = ".", output = file.path(root, "detector.Rmd"), check = FALSE) {
   read <- function(path) paste(readLines(file.path(root, path), encoding = "UTF-8", warn = FALSE), collapse = "\n")
   template <- read("templates/detector-template.Rmd")

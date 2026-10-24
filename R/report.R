@@ -17,7 +17,18 @@ report_escape <- function(x) {
     error = "", warnings = unique(warnings), value = value)
 }
 
-analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_options = list(), code_options = list()) {
+.report_run_modules <- function(docs, text_options, formula_options, code_options) {
+  args <- list(doc_a = docs$A, doc_b = docs$B)
+  list(
+    text = .report_module(function() do.call(analyze_text_pair_approx, c(args, text_options))),
+    formula_single = .report_module(function() do.call(compare_math_pair, args)),
+    formula_sequence = .report_module(function() do.call(find_math_sequences, c(args, formula_options))),
+    code_whole = .report_module(function() do.call(compare_code_pair, args)),
+    code_local = .report_module(function() do.call(analyze_code_pair_local, c(args, code_options)))
+  )
+}
+
+analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_options = list(), code_options = list(), exclusions = NULL) {
   for (options in list(text_options, formula_options, code_options)) {
     if (!is.list(options) || (length(options) && (is.null(names(options)) || any(!nzchar(names(options))) || anyDuplicated(names(options)))))
       stop("Module options must be named lists with unique names.")
@@ -34,21 +45,33 @@ analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_op
       units = if (ok) nrow(d$units) else NA_integer_, diagnostics = if (ok) nrow(d$diagnostics) else NA_integer_,
       message = if (ok) "" else conditionMessage(d), stringsAsFactors = FALSE)
   }))
-  skip <- function() list(status = "not_run", error = "两份输入均成功读取后才运行分析。", warnings = character(), value = NULL)
+  skip <- function(message = "两份输入均成功读取后才运行分析。")
+    list(status = "not_run", error = message, warnings = character(), value = NULL)
   modules <- setNames(lapply(seq_len(5L), function(i) skip()), c("text", "formula_single", "formula_sequence", "code_whole", "code_local"))
+  requested <- !(is.null(exclusions) || identical(exclusions, ""))
+  info <- list(status = if (requested) "not_run" else "not_requested", error = "",
+    records = exclusion_empty_records(), units = data.frame())
+  baseline <- NULL; analysis_docs <- docs
   if (all(manifest$read_status == "ok")) {
-    args <- list(doc_a = docs$A, doc_b = docs$B)
-    modules$text <- .report_module(function() do.call(analyze_text_pair_approx, c(args, text_options)))
-    modules$formula_single <- .report_module(function() do.call(compare_math_pair, args))
-    modules$formula_sequence <- .report_module(function() do.call(find_math_sequences, c(args, formula_options)))
-    modules$code_whole <- .report_module(function() do.call(compare_code_pair, args))
-    modules$code_local <- .report_module(function() do.call(analyze_code_pair_local, c(args, code_options)))
+    if (requested) {
+      baseline <- .report_run_modules(docs, text_options, formula_options, code_options)
+      plan <- tryCatch(prepare_document_exclusions(docs, exclusions), error = identity)
+      if (inherits(plan, "error")) {
+        info$status <- "error"; info$error <- conditionMessage(plan)
+        modules <- lapply(modules, function(m) skip("公共来源排除配置无效，未运行排除后分析。"))
+      } else {
+        analysis_docs <- plan$documents; info <- plan; info$documents <- NULL
+        modules <- .report_run_modules(analysis_docs, text_options, formula_options, code_options)
+      }
+    } else modules <- .report_run_modules(docs, text_options, formula_options, code_options)
   }
-  statuses <- vapply(modules, function(m) m$status, character(1))
-  overall <- if (any(manifest$read_status == "error")) "input_error" else if (any(statuses == "error")) "partial_failure" else
-    if (any(statuses == "limited")) "limited" else "completed"
+  statuses <- c(vapply(modules, function(m) m$status, character(1)),
+    vapply(baseline, function(m) m$status, character(1)))
+  overall <- if (any(manifest$read_status == "error")) "input_error" else if (info$status == "error") "exclusion_error" else
+    if (any(statuses == "error")) "partial_failure" else if (any(statuses == "limited")) "limited" else "completed"
   list(engine_version = "0.6.0-dev", verdict = "not_enabled", overall_status = overall,
-    manifest = manifest, documents = docs, modules = modules,
+    manifest = manifest, documents = docs, analysis_documents = analysis_docs, exclusions = info,
+    baseline_modules = baseline, modules = modules,
     requested_options = list(text = text_options, formula_sequence = formula_options, code_local = code_options),
     r_version = as.character(getRversion()))
 }
@@ -79,6 +102,27 @@ analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_op
     if (is.list(x[[name]])) .report_params(x[[name]], key) else
       data.frame(parameter = key, value = paste(as.character(x[[name]]), collapse = ", "), stringsAsFactors = FALSE)
   })
+  do.call(rbind, rows)
+}
+
+
+.report_scope_summary <- function(modules, stage) {
+  rows <- list()
+  for (name in names(modules)) {
+    m <- modules[[name]]; v <- m$value
+    messages <- c(m$error, m$warnings); messages <- paste(messages[nzchar(messages)], collapse = "; ")
+    coverage <- if (name %in% c("text", "code_local")) v$coverage else NULL
+    if (!is.null(coverage) && nrow(coverage)) {
+      for (i in seq_len(nrow(coverage))) {
+        c <- coverage[i, ]; text <- name == "text"
+        rows[[length(rows) + 1L]] <- data.frame(stage = stage, method = name, side = c$side, status = m$status,
+          unit = if (text) "character" else "token", comparable = c[[if (text) "comparable_chars" else "comparable_tokens"]],
+          matched = c[[if (text) "matched_chars" else "matched_tokens"]], coverage = c$coverage, match_entries = NA_integer_, message = messages)
+      }
+    } else rows[[length(rows) + 1L]] <- data.frame(stage = stage, method = name, side = "-", status = m$status,
+      unit = "match_entries", comparable = NA_integer_, matched = NA_integer_, coverage = NA_real_,
+      match_entries = if (is.null(v)) NA_integer_ else nrow(v$matches), message = messages)
+  }
   do.call(rbind, rows)
 }
 
@@ -121,6 +165,27 @@ detector_report_html <- function(result, max_evidence = 10L) {
     note("输入读取失败，本次未运行分项比较。请检查路径、Rmd扩展名及UTF-8编码后重新运行。")
     add("</div>"); return(paste(out, collapse = "\n"))
   }
+  if (!is.null(result$exclusions) && result$exclusions$status != "not_requested") {
+    section("公共来源：明确标注与排除前后")
+    note(paste("排除状态：", result$exclusions$status))
+    note("来源由操作者明确标注；本程序不验证来源真实性，不根据共有内容自动排除。以下正文证据属于排除后范围，原始输入概况和诊断仍保留。")
+    if (nzchar(result$exclusions$error)) {
+      add("<div class='notice error'>", .report_pre(result$exclusions$error), "</div>")
+      note("配置未全部通过核对，没有应用任何一侧的排除；排除后分析未运行。排除前结果仅供核查。")
+    }
+    if (!is.null(result$baseline_modules)) add(.report_table(rbind(
+      .report_scope_summary(result$baseline_modules, "排除前"),
+      .report_scope_summary(result$modules, "排除后"))))
+    records <- result$exclusions$records
+    if (nrow(records)) {
+      note(paste("排除记录共", nrow(records), "条；以下最多展示100条，quote最多展示4000字符，完整记录保留在分析结果中。"))
+      shown <- utils::head(records, 100L); shown$quote <- substr(shown$quote, 1L, 4000L)
+      add(.report_table(shown))
+      note("已排除的解析单元（最多展示100行）：")
+      add(.report_table(utils::head(result$exclusions$units, 100L)))
+    }
+    note("排除前后的分母不同，不能只比较覆盖率高低。被排除区域仍作匹配边界，未解析诊断不会因排除自动清空。")
+  } else note("未启用公共来源排除；共同题干仍可能形成匹配。")
   da <- result$documents$A; db <- result$documents$B
   section("文字：字符覆盖与片段"); text <- module("text")
   if (!is.null(text)) {
@@ -200,7 +265,7 @@ detector_report_html <- function(result, max_evidence = 10L) {
       if (length(rows)) { note(paste(labels[[name]], toupper(side), "的受限诊断共", length(rows), "条：")); add(.report_table(utils::head(do.call(rbind, rows), 100L))) }
     }
   }
-  note("诊断表最多展示100条。图片内容、外部资源、复杂语法和未成功解析区域不视为已分析；共同题干和标准解法尚未排除。")
+  note("诊断表最多展示100条。图片内容、外部资源、复杂语法和未成功解析区域不视为已分析；标准解法仍需核查；共同题干仅在提供有效人工标注时排除。")
   section("本次参数与方法边界")
   add(.report_table(.report_params(result$requested_options)))
   for (name in names(result$modules)) {
@@ -211,7 +276,7 @@ detector_report_html <- function(result, max_evidence = 10L) {
     if (length(parameters)) { add("<h3>", report_escape(labels[[name]]), "</h3>", .report_table(.report_params(parameters))) }
   }
   note(paste("每类最多展示", max_evidence, "条；展示截断不改变分析或覆盖结果。参数只是当前开发默认值，尚未作检测能力标定。"))
-  note("本版本尚未实现最终判断规则、公共题干排除、公式覆盖及开发/保留集效果评估。高覆盖可能来自共同来源或标准解法；低覆盖可能来自语法限制或改写。请结合原文核查。")
+  note("本版本尚未实现最终判断规则、自动公共来源识别、公式覆盖及开发/保留集效果评估。公共来源仅按有效人工标注排除。高覆盖可能来自共同来源或标准解法；低覆盖可能来自语法限制或改写。请结合原文核查。")
   add("</div>")
   paste(out, collapse = "\n")
 }

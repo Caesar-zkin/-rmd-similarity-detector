@@ -126,3 +126,11 @@ prepare_math_steps保留每行与原公式单元的关系，支持有限align/al
 开发维护：修改R/或模板后运行 `Rscript scripts/build-detector.R`，CI用 `--check`验证生成文件未过期。
 测试：`Rscript tests/test-report.R`；真实单文件编译测试：`Rscript tests/test-render-report.R`。
 详见[报告规格与运行说明](docs/report-spec.md)。检测阶段不自动安装依赖，不执行待检测作业。
+
+## 明确标注公共来源
+
+默认不排除共有内容。可提供CSV，逐侧指定完整解析单元的行号、原文核对文本、理由和来源；任何记录无效则不应用排除。
+运行 `Rscript examples/run-exclusion-demo.R` 查看B03共同题干的排除前后比较。
+生成演示报告：`Rscript scripts/render-detector.R validation/boundary/fixtures/B03/a.Rmd validation/boundary/fixtures/B03/b.Rmd reports-local/prompt-excluded.html examples/prompt-exclusions.csv`。
+报告保留前后分母/匹配量、排除记录及原始诊断。来源真实性由操作者确认，不自动识别公共题干或标准解法。
+测试：`Rscript tests/test-exclusions.R`。详见[排除规格](docs/exclusion-spec.md)。

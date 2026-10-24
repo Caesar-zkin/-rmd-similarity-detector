@@ -11,6 +11,7 @@ output:
 params:
   input_a: "examples/report-a.Rmd"
   input_b: "examples/report-b.Rmd"
+  exclusion_file: ""
   max_evidence: 10
   text_k: 5
   text_min_chars: 30
@@ -42,7 +43,8 @@ report_result <- analyze_rmd_pair(
   formula_options = list(min_steps = params$formula_min_steps,
     max_steps = params$formula_max_steps, max_skips = params$formula_max_skips),
   code_options = list(min_tokens = params$code_min_tokens,
-    window_tokens = params$code_window_tokens, max_skips = params$code_max_skips)
+    window_tokens = params$code_window_tokens, max_skips = params$code_max_skips),
+  exclusions = if (nzchar(params$exclusion_file)) params$exclusion_file else NULL
 )
 cat(detector_report_html(report_result, params$max_evidence))
 ``````
