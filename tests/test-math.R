@@ -44,10 +44,10 @@ check(normalize_math("")$status == "empty", "empty formula status")
 check(normalize_math(" \n ")$status == "empty", "whitespace formula status")
 check(compare_math_pair(doc("正文"), formula("x"))$status == "not_applicable", "missing math status")
 check(compare_math_pair(doc("$x"), formula("x"))$status == "limited", "broken parser status propagated")
-mapped <- doc("标题\n\n$ x + y $", "A")
+mapped <- doc("标题\n\n$x + y$", "A")
 prepared <- prepare_math_units(mapped)
 details <- prepared$details[[1L]]
-check(identical(as.integer(unlist(details$source_positions)), c(7L, 9L, 11L)), "document token positions")
+check(identical(as.integer(unlist(details$source_positions)), c(6L, 8L, 10L)), "document token positions")
 for (i in seq_along(details$tokens)) {
   pos <- details$source_positions[[i]]
   recovered <- paste0(substring(mapped$source, pos, pos), collapse = "")
