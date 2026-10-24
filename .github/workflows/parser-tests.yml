@@ -50,3 +50,9 @@ jobs:
 
       - name: Run Markdown normalization demonstration
         run: Rscript examples/run-text-markdown-demo.R
+
+      - name: Run formula foundation tests
+        run: Rscript tests/test-math.R
+
+      - name: Run formula demonstration
+        run: Rscript examples/run-math-demo.R

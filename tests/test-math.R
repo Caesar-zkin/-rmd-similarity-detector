@@ -1,0 +1,70 @@
+source("R/parser.R", encoding = "UTF-8")
+source("R/math.R", encoding = "UTF-8")
+count <- 0L
+check <- function(ok, label) {
+  if (!isTRUE(ok)) stop(label)
+  count <<- count + 1L; cat("PASS", label, "\n")
+}
+doc <- function(s, id = "document") parse_rmd_text(s, file_id = id)
+formula <- function(s) doc(paste0("$", s, "$"))
+compare <- function(a, b) compare_math_pair(formula(a), formula(b))
+check(normalize_math("x + y")$normalized == "x+y", "remove math whitespace")
+check(normalize_math("\\dfrac{x}{2}")$normalized == "\\frac{x}{2}", "fraction alias")
+check(normalize_math("\\left(x\\, + y\\right)")$normalized == "(x+y)", "layout commands only")
+check(normalize_math("x-y")$normalized != normalize_math("x+y")$normalized, "sign preserved")
+check(normalize_math("x_1")$normalized != normalize_math("x_2")$normalized, "numeric subscript preserved")
+check(normalize_math("x^2")$normalized != normalize_math("x^3")$normalized, "power preserved")
+r <- compare("x+x", "a+a")
+check(nrow(r$matches) == 1L && r$matches$renamed_equal, "consistent variable renaming")
+check(!r$matches$raw_equal && !r$matches$normalized_equal, "comparison layers separated")
+check(identical(r$matches$variable_map[[1L]]$a, "x") &&
+  identical(r$matches$variable_map[[1L]]$b, "a"), "explicit mapping")
+check(nrow(compare("x+x", "a+b")$matches) == 0L, "repeated variable relation preserved")
+check(nrow(compare("x+y", "a+a")$matches) == 0L, "mapping is one to one")
+check(nrow(compare("\\sin x", "\\cos a")$matches) == 0L, "function names preserved")
+check(nrow(compare("x+2", "a+3")$matches) == 0L, "numbers preserved")
+check(nrow(compare("x-y", "a+b")$matches) == 0L, "operators preserved")
+check(compare("\\alpha+\\alpha", "x+x")$matches$renamed_equal, "Greek control sequence variable")
+check(nrow(compare("\\mathrm{Var}(x)", "\\mathrm{Mean}(a)")$matches) == 0L, "font payload preserved")
+check(nrow(compare("\\text{a b}+x", "\\text{ab}+a")$matches) == 0L, "text whitespace preserved")
+check(nrow(compare("\\mathbf{x}", "\\mathrm{x}")$matches) == 0L, "font command preserved")
+r <- compare("\\frac{x}{2}", "\\dfrac{ x }{2}")
+check(r$matches$normalized_equal && !r$matches$raw_equal, "format-only equality")
+check(compare("x+x", "x+x")$matches$raw_equal, "raw equality")
+check(normalize_math("\\mystery{x}")$status == "limited", "unknown command limited")
+check(is.na(normalize_math("\\mystery{x}")$structure_key), "no structural claim for unknown macro")
+check(nrow(compare("\\mystery{x}", "\\mystery{a}")$matches) == 0L, "unknown macro not renamed")
+r <- compare("\\mystery{x}", "\\mystery{x}")
+check(r$status == "limited" && r$matches$raw_equal && !r$matches$normalized_equal,
+  "unsupported exact source retained with limitation")
+for (s in c("{x", "x}", "x\\", "x%comment", "x&y", "\\begin{align}x\\end{align}")) {
+  check(normalize_math(s)$status == "limited", "unsupported or broken syntax limited")
+}
+check(normalize_math("")$status == "empty", "empty formula status")
+check(normalize_math(" \n ")$status == "empty", "whitespace formula status")
+check(compare_math_pair(doc("正文"), formula("x"))$status == "not_applicable", "missing math status")
+check(compare_math_pair(doc("$x"), formula("x"))$status == "limited", "broken parser status propagated")
+mapped <- doc("标题\n\n$ x + y $", "A")
+prepared <- prepare_math_units(mapped)
+details <- prepared$details[[1L]]
+check(identical(as.integer(unlist(details$source_positions)), c(7L, 9L, 11L)), "document token positions")
+for (i in seq_along(details$tokens)) {
+  pos <- details$source_positions[[i]]
+  recovered <- paste0(substring(mapped$source, pos, pos), collapse = "")
+  check(identical(recovered, details$tokens[i]), "source token reconstruction")
+}
+original <- mapped
+invisible(compare_math_pair(mapped, mapped))
+check(identical(mapped, original), "input not modified")
+empty <- prepare_math_units(doc("正文"))
+check(nrow(empty) == 0L && identical(names(empty), names(prepared)), "stable empty schema")
+check(nrow(prepare_math_units(doc("`$x$`\n\n```{r}\nstop('must not run')\n```"))) == 0L,
+  "code excluded without execution")
+multiple <- doc("$x+x$\n\n$y+y$")
+check(nrow(compare_math_pair(multiple, multiple)$matches) == 4L, "all formula positions retained")
+fails <- function(expression, label) check(inherits(try(force(expression), silent = TRUE), "try-error"), label)
+for (bad in list(NA_character_, 2, c("x", "y"))) fails(normalize_math(bad), "invalid formula input")
+for (bad in list(0, -1, 1.5, Inf, NA_real_, "2")) fails(compare_math_pair(mapped, mapped, bad), "invalid pair limit")
+fails(compare_math_pair(multiple, multiple, max_pairs = 3L), "pair limit enforced")
+fails(normalize_math(paste0(rep("x", 20001L), collapse = "")), "formula size limit")
+cat("All", count, "formula assertions passed.\n")

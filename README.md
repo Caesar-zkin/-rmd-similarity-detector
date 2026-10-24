@@ -2,7 +2,7 @@
 
 基于 R Markdown 的文字、数学公式与 R 代码相似性检测课程项目。
 
-当前分支：v0.3.0文字模块开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。深度语义改写、公式/代码相似度、最终判定和detector.Rmd尚未实现。
+当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。多步公式推导、深度语义改写、代码相似度、最终判定和detector.Rmd尚未实现。
 
 ## 项目目标
 
@@ -78,3 +78,10 @@ doc$diagnostics
 支持有限的强调、删除线、引用/列表前缀和转义处理，保留原文字符映射；不是完整Markdown实现。
 运行 `Rscript examples/run-text-markdown-demo.R`，示例的规范化正文一致，Jaccard和覆盖率均为1。
 测试：`Rscript tests/test-text-markdown.R`。原文、公式和代码不会被此步骤修改。
+
+## 单条公式比较
+
+运行 `Rscript examples/run-math-demo.R`；也可追加两份Rmd路径。
+测试：`Rscript tests/test-math.R`。加载R/parser.R后加载R/math.R。
+支持有限LaTeX词法规范化与单条公式内的一一符号映射，未知命令标受限。
+这是结构匹配，不能证明数学等价或抄袭；多步推导待实现。详见[公式规格](docs/math-spec.md)。
