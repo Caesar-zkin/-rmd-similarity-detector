@@ -68,3 +68,9 @@ jobs:
 
       - name: Run multiline formula demonstration
         run: Rscript examples/run-math-multiline-demo.R
+
+      - name: Run code foundation tests
+        run: Rscript tests/test-code.R
+
+      - name: Run code foundation demonstration
+        run: Rscript examples/run-code-demo.R

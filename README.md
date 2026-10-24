@@ -2,7 +2,7 @@
 
 基于 R Markdown 的文字、数学公式与 R 代码相似性检测课程项目。
 
-当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。新增单独公式和有限多行环境的多步一致映射与受限步骤插删。复杂公式环境、深度语义改写、代码相似度、最终判定和detector.Rmd尚未实现。
+当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。新增单独公式和有限多行环境的多步一致映射与受限步骤插删。复杂公式环境、深度语义改写、新增完整R代码单元的原始/词法/受限改名比较。代码局部匹配、最终判定和detector.Rmd尚未实现。
 
 ## 项目目标
 
@@ -99,3 +99,10 @@ doc$diagnostics
 测试：`Rscript tests/test-math-multiline.R`。加载顺序仍为parser.R → math.R → math-sequences.R。
 prepare_math_steps保留每行与原公式单元的关系，支持有限align/aligned、gather/gathered及equation包装。
 多列、未知命令和复杂嵌套标受限；不是完整LaTeX或数学等价分析。
+
+## R代码基础比较
+
+运行 `Rscript examples/run-code-demo.R`；可追加两份Rmd路径。
+测试：`Rscript tests/test-code.R`。加载parser.R后加载code.R。
+使用R解析器只解析不执行；保留函数、参数、成员、数字和字符串，简单局部变量可一致改名。
+未知调用和复杂作用域保留原名并标受限；当前按完整单元比较。详见[代码规格](docs/code-spec.md)。
