@@ -116,7 +116,9 @@ Import-Csv .\reports-local\validation\decision-summary.csv | Format-Table scope,
 共同题干、短常规公式/代码匹配只是风险观察，不被自动标为抄袭或冒充独立答案；无最终分类时不计算误报率。
 
 independent-tasks.md是可单独交给未见过源答案者的任务单，independent-collection.md说明匿名采集及来源审核，另有空白Rmd和登记CSV模板。
-真实材料存放已忽略的validation/independent-local/；当前批量脚本不会读取它们，公开独立答案名额继续pending。尚未实际收集独立答案。
+真实材料存放已忽略的validation/independent-local/；公开批量脚本不会读取它们，公开独立答案名额继续pending。尚未实际收集独立答案。
+新增scripts/run-independent-validation.R作为单独本地入口：--audit核对来源字段与指纹，人工verified后才分析，基础与加长任务分开统计；详见independent-collection.md。
+independent-extended-tasks.md是不含源答案的加长任务单。当前登记模板为七个pending记录，不代表已经采集。旧版私人登记表需补新字段，不能覆盖已收集信息。
 
 ## 加长开发补充材料
 
