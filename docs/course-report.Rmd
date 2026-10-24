@@ -1,6 +1,6 @@
 ---
 title: "两份 R Markdown 作业的相似性检测"
-author: "填写姓名与学号"
+author: "Cesar"
 output:
   html_document:
     self_contained: true
