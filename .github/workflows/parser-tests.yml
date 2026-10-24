@@ -32,3 +32,9 @@ jobs:
 
       - name: Run text tests
         run: Rscript tests/test-text.R
+
+      - name: Run exact matching and coverage tests
+        run: Rscript tests/test-text-matches.R
+
+      - name: Run file-to-file text demo
+        run: Rscript examples/run-text-demo.R

@@ -2,7 +2,7 @@
 
 基于 R Markdown 的文字、数学公式与 R 代码相似性检测课程项目。
 
-当前分支：v0.2.0 开发，已提供结构解析器与测试；相似度算法和最终检测入口尚未实现。
+当前分支：v0.3.0文字模块开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配定位和双向覆盖率。近似改写、公式/代码相似度、最终判定和detector.Rmd尚未实现。
 
 ## 项目目标
 
@@ -48,3 +48,16 @@ doc$diagnostics
 
 真实学生作业、私人报告和本地文件路径不提交。仅提交有权使用的匿名或自建材料。保留测试材料不得用于日常调参或自动化回归测试。
 
+
+## 文件比较演示（开发分支）
+
+从项目根目录执行 `Rscript examples/run-text-demo.R`。
+指定文件：`Rscript examples/run-text-demo.R A.Rmd B.Rmd 5 30`，
+最后两个参数分别为字符片段长度和合并后最低匹配长度，尚未标定。
+
+加载顺序为parser.R → text.R → text-matches.R。
+新增逻辑在R/text-matches.R，旧工具函数不改动。
+
+测试：`Rscript tests/test-text-matches.R`；
+同时保留 `tests/test-parser.R` 和 `tests/test-text.R`。
+仅分析正文，不输出最终抄袭结论。详见[文字规格](docs/text-spec.md)。

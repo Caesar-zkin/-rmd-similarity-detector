@@ -27,3 +27,12 @@ Jaccard相似度为0.2。
 k=2仅用于演示，不是经过验证的最终参数。
 该分数只描述正文片段重合，不是抄袭概率。
 
+
+## 一条命令运行文字分析
+
+`Rscript examples/run-text-demo.R`
+
+可选：`Rscript examples/run-text-demo.R A.Rmd B.Rmd 5 30`。
+输出整体Jaccard、双向覆盖、连续精确匹配文字和行号，不写输出文件。
+默认示例Jaccard=0.2、覆盖率两侧均为0.5，匹配文字为“统计”。
+只比较正文；小参数仅为示范，不是检测阈值或抄袭判定。
