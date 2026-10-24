@@ -12,6 +12,7 @@
 data-private/
 reports-local/
 validation/holdout-local/
+validation/independent-local/
 validation/results-local/
 # Generated deliverables
 dist/

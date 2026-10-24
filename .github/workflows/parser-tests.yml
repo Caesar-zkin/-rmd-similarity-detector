@@ -93,6 +93,12 @@ jobs:
       - name: Run registered development experiment
         run: Rscript scripts/run-validation.R
 
+      - name: Run boundary control tests
+        run: Rscript tests/test-boundary.R
+
+      - name: Run separate boundary observations
+        run: Rscript scripts/run-boundary.R
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |
