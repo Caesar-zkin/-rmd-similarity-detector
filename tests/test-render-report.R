@@ -77,8 +77,14 @@ cli <- function(a, b, name, exclusions = "") {
   check(status == 0L && file.exists(output), "standalone CLI generates an HTML report")
   check(!any(grepl("Could not convert TeX math", log, fixed = TRUE)), "CLI does not parse hidden R source as TeX")
   value <- paste(readLines(output, encoding = "UTF-8", warn = FALSE), collapse = "\n")
-  check(grepl("<div[^>]*class=['\"]detector-report['\"]", value, perl = TRUE) &&
-    grepl("<h2[^>]*>开发规则试判（未标定）</h2>", value, perl = TRUE), "CLI contains actual rendered evidence sections")
+  has_container <- grepl("<div[^>]*class=['\"]detector-report['\"]", value, perl = TRUE)
+  has_heading <- grepl("<h2[^>]*>\\s*开发规则试判（未标定）\\s*</h2>", value, perl = TRUE)
+  if (!has_container || !has_heading) {
+    lines <- strsplit(value, "\n", fixed = TRUE)[[1L]]
+    cat(paste(lines[grepl("detector-report|开发规则试判|<h2|</h2>", lines)], collapse = "\n"), "\n")
+  }
+  check(has_container, "CLI contains actual rendered evidence container")
+  check(has_heading, "CLI contains actual rendered decision heading")
   check(!any(vapply(c("rmd_empty_units", "group_position_evidence", "# BEGIN R/parser.R"),
     function(marker) grepl(marker, value, fixed = TRUE), logical(1))), "CLI HTML contains no bundled implementation")
   check(offline(value), "CLI HTML remains self-contained")
