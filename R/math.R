@@ -169,9 +169,14 @@ compare_math_pair <- function(doc_a, doc_b, max_pairs = 10000L) {
   if (n > 20000L) stop("Formula character limit exceeded (20000).")
   cut <- function(a, b) if (a > b) "" else paste0(chars[seq.int(a, b)], collapse = "")
   ws <- c(" ", "\t", "\n", "\r", "\f", "\v")
+  escaped <- function(at) {
+    j <- at - 1L; count <- 0L
+    while (j >= 1L && chars[j] == "\\") { count <- count + 1L; j <- j - 1L }
+    count %% 2L == 1L
+  }
   trim <- function(a, b) {
     while (a <= b && chars[a] %in% ws) a <- a + 1L
-    while (b >= a && chars[b] %in% ws) b <- b - 1L
+    while (b >= a && chars[b] %in% ws && !escaped(b)) b <- b - 1L
     c(a, b)
   }
   mode <- ""; issues <- character()

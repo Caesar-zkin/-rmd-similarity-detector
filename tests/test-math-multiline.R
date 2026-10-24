@@ -78,6 +78,10 @@ check(nrow(protected) == 2L && all(protected$math_status == "ok"), "text group r
 check(grepl("a\\\\b & c", protected$normalized[1L], fixed = TRUE), "text payload preserved literally")
 escaped <- prepare_math_steps(doc(env("align", c("x&=\\&", "y&=1"))))
 check(escaped$math_status[1L] == "ok" && escaped$normalized[1L] == "x=\\&", "escaped ampersand retained")
+control_space <- prepare_math_steps(doc("$$x\\ $$"))
+check(control_space$math_status == "ok" && control_space$normalized == "x", "trailing escaped space is normalized intact")
+aligned_space <- prepare_math_steps(doc(env("align", c("x&=y\\ ", "y&=1"))))
+check(all(aligned_space$math_status == "ok") && aligned_space$normalized[1L] == "x=y", "escaped space before row separator")
 changed <- doc(env("align", c("a&=b", "c&=d", "d&=1")))
 check(nrow(find_math_sequences(a, changed, min_steps = 3L)$matches) == 0L, "inconsistent multiline mapping rejected")
 for (text in c(

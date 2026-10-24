@@ -157,7 +157,7 @@ multline/split/matrix/cases/alignat及其他复杂环境尚未支持。
 - parent_unit_id、parent_raw：原公式单元标识与完整原文，方便复核环境和元数据。
 - unit_id：普通公式保持原ID；多行/环境步骤使用原ID:s001等唯一标识。
 - step_index、environment：父单元内的行序号及实际处理环境。
-- content/raw：去除环境包装与行分隔符后、保留对齐标记的连续原始行片段；两端ASCII空白被裁去。
+- content/raw：去除环境包装与行分隔符后、保留对齐标记的连续原始行片段；两端未转义的ASCII空白被裁去。
 - content_start/end及行列：上述原始片段在doc$source中的连续范围。
 - comparison_content、comparison_positions：忽略受支持对齐/编号标记后的内容及各字符全局位置。
 - details：规范化token及映射、状态和issues；token位置已映射到全局源字符。
