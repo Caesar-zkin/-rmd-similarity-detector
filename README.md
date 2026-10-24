@@ -2,7 +2,7 @@
 
 基于 R Markdown 的文字、数学公式与 R 代码相似性检测课程项目。
 
-当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。新增单独公式和有限多行环境的多步一致映射与受限步骤插删。复杂公式环境、深度语义改写、新增完整R代码单元的原始/词法/受限改名比较。新增顶层语句窗口、受限局部插删与去重token覆盖。最终判定和detector.Rmd尚未实现。
+当前分支：v0.6.0证据报告开发中。已实现文字、受限公式与R代码分项比较，并生成可独立编译的detector.Rmd。最终判定、规则标定及开发/保留集效果评估尚未完成。
 
 ## 项目目标
 
@@ -25,7 +25,9 @@
 | examples/ | 自建示例作业 |
 | tests/ | 自动化与边界测试 |
 | validation/ | 验证方案、样例清单与结果说明 |
-| detector.Rmd | 计划中的最终单文件入口，尚未创建 |
+| detector.Rmd | 生成的单文件证据报告入口 |
+| templates/ | 报告模板 |
+| scripts/ | 构建与编译助手 |
 
 开发时允许模块化维护，交付时生成包含所需函数的 detector.Rmd，避免手工维护两份算法。
 
@@ -42,7 +44,7 @@ doc$units
 doc$diagnostics
 ```
 
-测试命令：`Rscript tests/test-parser.R`。详见[解析契约](docs/parser-spec.md)。本分支配置Linux/Windows结构测试；只有实际成功运行的结果才算验证通过。目前没有抄袭检测命令或经过验证的阈值。
+测试命令：`Rscript tests/test-parser.R`。详见[解析契约](docs/parser-spec.md)。本分支配置Linux/Windows结构测试；只有实际成功运行的结果才算验证通过。已有证据报告命令，尚无经过验证的最终判定阈值。
 
 ## 数据管理
 
@@ -114,3 +116,13 @@ prepare_math_steps保留每行与原公式单元的关系，支持有限align/al
 按完整顶层语句组成重叠窗口，允许预算内语句插删，整段共用变量映射；覆盖按原文token位置去重。
 分别报告原词法覆盖与包含改名的结构对应覆盖，不解释为抄袭概率。
 不切入单条表达式或函数/循环内部做局部匹配，不支持任意token修改；参数未标定。
+
+## 生成完整证据报告
+
+环境需预装rmarkdown及Pandoc。运行 `Rscript scripts/render-detector.R`，默认使用两份综合示例，输出 `reports-local/detector-report.html`。
+指定作业：`Rscript scripts/render-detector.R A.Rmd B.Rmd reports-local/my-report.html`。
+也可直接修改detector.Rmd顶部输入参数后Knit。报告明确显示未启用最终判定，不输出抄袭概率。
+
+开发维护：修改R/或模板后运行 `Rscript scripts/build-detector.R`，CI用 `--check`验证生成文件未过期。
+测试：`Rscript tests/test-report.R`；真实单文件编译测试：`Rscript tests/test-render-report.R`。
+详见[报告规格与运行说明](docs/report-spec.md)。检测阶段不自动安装依赖，不执行待检测作业。

@@ -12,7 +12,7 @@
 | v0.6.0 | 合并证据、判断、HTML报告 | 覆盖不重复；内容安全展示 |
 | v1.0.0 | 验证、冻结、单文件交付 | 完整公开保留测试结果和局限 |
 
-## 当前阶段：文字、公式及v0.5.0代码基础开发
+## 当前阶段：v0.6.0证据报告开发
 解析器已合入main。文字模块在feat/text、PR #2开发。
 已实现正文规范化、文档位置映射、Jaccard、连续精确匹配、候选窗口和近似局部对齐；覆盖率按实际相同字符去重。已补充有限Markdown排版处理。可运行examples/run-text-demo.R和examples/run-text-approx-demo.R。
 新增R/math.R的单条公式三层比较，以及math-sequences.R的多步一致映射和受限跳步；未知命令标受限。详见math-spec.md。
@@ -34,4 +34,5 @@
 
 代码基础入口：R/code.R，运行examples/run-code-demo.R；新增code-local.R及examples/run-code-local-demo.R，提供分开的词法/改名token覆盖。详见code-spec.md。
 
-下一批：核查三类证据的数据契约，接入可运行的Rmd报告；继续按开发材料验证规则，尚未作最终判定或性能评估。
+已接入可运行的detector.Rmd证据报告、可重复打包及独立目录编译测试。默认未启用最终判定。
+下一批：补齐开发材料分组与复制区间标注，核查跨方法证据，开发并验证判定规则；保留集未使用。

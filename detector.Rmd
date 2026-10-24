@@ -1,0 +1,2308 @@
+---
+title: "Rmd 作业相似性证据报告"
+output:
+  html_document:
+    self_contained: true
+    template: null
+    mathjax: null
+    theme: null
+    highlight: null
+    anchor_sections: false
+params:
+  input_a: "examples/report-a.Rmd"
+  input_b: "examples/report-b.Rmd"
+  max_evidence: 10
+  text_k: 5
+  text_min_chars: 30
+  text_min_similarity: 0.8
+  formula_min_steps: 2
+  formula_max_steps: 5
+  formula_max_skips: 1
+  code_min_tokens: 20
+  code_window_tokens: 100
+  code_max_skips: 1
+---
+
+<!-- Generated from R/ modules and this template. Edit sources, then rebuild. -->
+
+<style>
+body{font:16px/1.65 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#243247;background:#f6f8fb;margin:0 auto;padding:32px;max-width:1180px}h1,h2,h3{color:#17395b;line-height:1.35}h2{border-bottom:2px solid #d9e2ee;padding-bottom:10px;margin-top:40px}h4{margin:8px 0}.notice{padding:18px 22px;background:#fff4d9;border-left:5px solid #ba820d;border-radius:5px}.error{background:#fff0ef;border-color:#bb3b34}.muted{color:#64748b;font-size:.9em}.table-wrap{overflow-x:auto;margin:16px 0}table{border-collapse:collapse;width:100%;background:white;font-size:.9em}th,td{text-align:left;vertical-align:top;padding:10px 12px;border:1px solid #dce3ec;overflow-wrap:anywhere}th{background:#edf3fa}pre{background:#f0f4f9;border:1px solid #dce3ec;border-radius:5px;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 Consolas,monospace}.evidence{background:white;border:1px solid #dce3ec;border-radius:7px;padding:18px;margin:20px 0}.evidence-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}@media(max-width:760px){body{padding:16px}.evidence-pair{grid-template-columns:1fr}}
+</style>
+
+``````{r detector-engine, include=FALSE}
+# BEGIN R/parser.R
+# Rmd structural parser. Base R only; never evaluates input or YAML.
+
+rmd_empty_units <- function() {
+  data.frame(unit_id = character(), file_id = character(), type = character(),
+    context_id = character(), section = character(), language = character(),
+    start_offset = integer(), end_offset = integer(), start_line = integer(),
+    start_column = integer(), end_line = integer(), end_column = integer(),
+    content_start = integer(), content_end = integer(), raw = character(),
+    content = character(), status = character(), stringsAsFactors = FALSE)
+}
+
+rmd_empty_diagnostics <- function() {
+  data.frame(code = character(), severity = character(), line = integer(),
+    column = integer(), message = character(), stringsAsFactors = FALSE)
+}
+
+parse_rmd_text <- function(text, file_id = "document") {
+  if (!is.character(text) || length(text) != 1L || is.na(text))
+    stop("text must be one non-missing character string.")
+  if (!is.character(file_id) || length(file_id) != 1L || is.na(file_id) || !nzchar(file_id))
+    stop("file_id must be one non-empty string.")
+  # All positions refer to this normalized source, not to original bytes.
+  source <- gsub("\r\n?", "\n", enc2utf8(text), perl = TRUE)
+  source <- sub("^\ufeff", "", source)
+  n <- nchar(source, type = "chars")
+  chars <- if (n) strsplit(source, "", fixed = TRUE)[[1L]] else character()
+  line_starts <- c(1L, which(chars == "\n") + 1L)
+  units <- list(); diagnostics <- list(); context <- 0L; section <- ""
+  cut <- function(a, b) if (a > b || a > n || b < 1L) "" else substr(source, a, b)
+  pos <- function(k) {
+    li <- findInterval(k, line_starts)
+    c(as.integer(li), as.integer(k - line_starts[li] + 1L))
+  }
+  add_diag <- function(code, at, message, severity = "warning") {
+    p <- pos(at)
+    diagnostics[[length(diagnostics) + 1L]] <<- data.frame(code = code,
+      severity = severity, line = p[1L], column = p[2L], message = message,
+      stringsAsFactors = FALSE)
+  }
+  new_context <- function() { context <<- context + 1L }
+  emit <- function(type, a, b, ca = a, cb = b, language = "", status = "ok") {
+    if (a > b) return(invisible(NULL))
+    p <- pos(a); q <- pos(b)
+    units[[length(units) + 1L]] <<- data.frame(
+      unit_id = sprintf("u%05d", length(units) + 1L), file_id = file_id,
+      type = type, context_id = sprintf("p%05d", context), section = section,
+      language = language, start_offset = as.integer(a), end_offset = as.integer(b),
+      start_line = p[1L], start_column = p[2L], end_line = q[1L], end_column = q[2L],
+      content_start = as.integer(ca), content_end = as.integer(cb), raw = cut(a, b),
+      content = cut(ca, cb), status = status, stringsAsFactors = FALSE)
+  }
+  starts <- function(at, token) identical(cut(at, at + nchar(token) - 1L), token)
+  escaped <- function(at) {
+    j <- at - 1L; count <- 0L
+    while (j >= 1L && chars[j] == "\\") { count <- count + 1L; j <- j - 1L }
+    count %% 2L == 1L
+  }
+  run_length <- function(at, ch) {
+    j <- at
+    while (j <= n && chars[j] == ch) j <- j + 1L
+    j - at
+  }
+  line_end <- function(at) {
+    li <- findInterval(at, line_starts)
+    if (li < length(line_starts)) line_starts[li + 1L] - 2L else n
+  }
+  after_line <- function(end) min(end + 2L, n + 1L)
+  find_close <- function(from, token, limit = n, exact_backticks = FALSE) {
+    j <- from; size <- nchar(token)
+    while (j + size - 1L <= limit) {
+      if (starts(j, token) && (exact_backticks || !escaped(j))) {
+        if (!exact_backticks ||
+            (run_length(j, "`") == size && (j == 1L || chars[j - 1L] != "`")))
+          return(j)
+      }
+      j <- j + 1L
+    }
+    NA_integer_
+  }
+  # Inline link/image destinations use balanced parentheses; no external reads.
+  link_end <- function(at, limit) {
+    label_start <- at + if (starts(at, "![")) 2L else 1L
+    j <- label_start
+    while (j <= limit && !(chars[j] == "]" && !escaped(j))) j <- j + 1L
+    if (j > limit || !starts(j + 1L, "(")) return(NULL)
+    depth <- 1L; k <- j + 2L
+    while (k <= limit) {
+      if (!escaped(k)) {
+        if (chars[k] == "(") depth <- depth + 1L
+        if (chars[k] == ")") depth <- depth - 1L
+        if (depth == 0L) return(c(k, label_start, j - 1L))
+      }
+      k <- k + 1L
+    }
+    NULL
+  }
+  i <- 1L; pending <- NA_integer_
+  flush <- function(before) {
+    if (!is.na(pending)) {
+      kind <- if (nzchar(trimws(cut(pending, before - 1L)))) "text" else "blank"
+      emit(kind, pending, before - 1L)
+      pending <<- NA_integer_
+    }
+  }
+  while (i <= n) {
+    at_line_start <- i == 1L || chars[i - 1L] == "\n"
+    end <- line_end(i)
+    line <- cut(i, end)
+    if (at_line_start) {
+      # Header recognized only at the beginning, never interpreted as YAML.
+      if (i == 1L && grepl("^---[ \t]*$", line)) {
+        flush(i); new_context(); j <- after_line(end); closing <- NA_integer_
+        while (j <= n) {
+          e <- line_end(j)
+          if (grepl("^(---|\\.\\.\\.)[ \t]*$", cut(j, e))) { closing <- j; break }
+          j <- after_line(e)
+        }
+        if (is.na(closing)) {
+          emit("yaml", i, n, after_line(end), n, status = "limited")
+          add_diag("unclosed_yaml", i, "YAML header is not closed; remaining source retained as limited YAML.")
+          i <- n + 1L
+        } else {
+          e <- line_end(closing)
+          emit("yaml", i, e, after_line(end), closing - 2L)
+          i <- e + 1L
+        }
+        new_context(); next
+      }
+      fence <- regexec("^ {0,3}(`{3,}|~{3,})(.*)$", line, perl = TRUE)
+      hit <- regmatches(line, fence)[[1L]]
+      if (length(hit)) {
+        flush(i); new_context(); marker <- substr(hit[2L], 1L, 1L)
+        width <- nchar(hit[2L]); info <- trimws(hit[3L])
+        language <- if (grepl("^\\{[A-Za-z][A-Za-z0-9_+-]*", info)) {
+          sub("^\\{([A-Za-z][A-Za-z0-9_+-]*).*", "\\1", info)
+        } else if (grepl("^[A-Za-z][A-Za-z0-9_+-]*", info)) {
+          sub("^([A-Za-z][A-Za-z0-9_+-]*).*", "\\1", info)
+        } else ""
+        j <- after_line(end); closing <- NA_integer_
+        pattern <- paste0("^ {0,3}", marker, "{", width, ",}[ \t]*$")
+        while (j <= n) {
+          e <- line_end(j)
+          if (grepl(pattern, cut(j, e), perl = TRUE)) { closing <- j; break }
+          j <- after_line(e)
+        }
+        status <- if (is.na(closing)) "limited" else "ok"
+        if (is.na(closing)) {
+          emit("code", i, n, after_line(end), n, language, status)
+          add_diag("unclosed_fence", i, "Code fence not closed; remaining source retained as code.")
+          i <- n + 1L
+        } else {
+          e <- line_end(closing)
+          emit("code", i, e, after_line(end), closing - 2L, language, status)
+          i <- e + 1L
+        }
+        if (tolower(language) != "r") add_diag("code_language_limited", units[[length(units)]]$start_offset,
+          "Unlabelled or non-R code retained; later stages may only compare text.", "info")
+        new_context(); next
+      }
+      if (grepl("^ {0,3}#{1,6}([ \t]+|$)", line, perl = TRUE)) {
+        flush(i); new_context()
+        section <- trimws(sub("[ \t]+#+[ \t]*$", "", sub("^ {0,3}#{1,6}[ \t]*", "", line)))
+        emit("heading", i, end); i <- end + 1L; new_context(); next
+      }
+      if (grepl("^[ \t]*$", line)) {
+        flush(i)
+        b <- if (end < n) end + 1L else end
+        emit("blank", i, b); i <- b + 1L; new_context(); next
+      }
+      if (grepl("^( {4}|\t)", line))
+        add_diag("indentation_ambiguous", i, "Indented Markdown blocks are retained as text; use fenced code for reliable classification.")
+    }
+    if (starts(i, "<!--") && !escaped(i)) {
+      flush(i); close <- find_close(i + 4L, "-->")
+      b <- if (is.na(close)) n else close + 2L
+      emit("unsupported", i, b, status = "limited")
+      add_diag("html_comment", i, "HTML comment retained but excluded from comparable content.", "info")
+      if (is.na(close)) add_diag("unclosed_html_comment", i, "HTML comment is not closed.")
+      i <- b + 1L; next
+    }
+    if (chars[i] == "<" && !escaped(i) && grepl("^</?[A-Za-z]", cut(i, min(n, i + 20L)))) {
+      flush(i)
+      # Keep script/style bodies out of prose, even when they span lines.
+      tag <- regmatches(cut(i, n), regexpr("^<(script|style)([[:space:]>])", cut(i, n), ignore.case = TRUE))
+      b <- end
+      if (length(tag) && nzchar(tag)) {
+        name <- sub("^<([A-Za-z]+).*", "\\1", tolower(tag))
+        rest <- cut(i + nchar(tag), n)
+        closing <- regexpr(paste0("</", name, "[ \t]*>"), rest, ignore.case = TRUE)
+        b <- if (closing[1L] < 0L) n else i + nchar(tag) + closing[1L] + attr(closing, "match.length") - 2L
+      }
+      emit("unsupported", i, b, status = "limited")
+      add_diag("raw_html", i, "Raw HTML line retained; embedded content is not structurally analysed.")
+      i <- b + 1L; next
+    }
+    if (!escaped(i) && (starts(i, "![") || chars[i] == "[")) {
+      lk <- link_end(i, end)
+      if (!is.null(lk)) {
+        flush(i); image <- starts(i, "![")
+        emit(if (image) "unsupported" else "text", i, lk[1L], lk[2L], lk[3L],
+          status = if (image) "limited" else "ok")
+        if (image) add_diag("image_not_read", i, "Image reference recorded; image content is not read.")
+        i <- lk[1L] + 1L; next
+      }
+      if (starts(i, "![")) add_diag("image_syntax_limited", i,
+        "Reference-style or complex image syntax is not extracted; retained as text.")
+    }
+    if (chars[i] == "`" && !escaped(i)) {
+      flush(i); size <- run_length(i, "`"); token <- strrep("`", size)
+      close <- find_close(i + size, token, end, TRUE)
+      if (is.na(close)) {
+        emit("unsupported", i, end, status = "limited")
+        add_diag("unclosed_inline_code", i, "Inline code is not closed on this line; retained without evaluation.")
+        i <- end + 1L
+      } else {
+        a <- i + size; b <- close - 1L; body <- cut(a, b)
+        is_r <- grepl("^r[ \t]+", body)
+        if (is_r) a <- a + nchar(regmatches(body, regexpr("^r[ \t]+", body)))
+        emit(if (is_r) "inline_r" else "inline_code", i, close + size - 1L, a, b,
+          language = if (is_r) "r" else "")
+        i <- close + size
+      }
+      next
+    }
+    opener <- ""; closer <- ""; display <- FALSE
+    if (!escaped(i)) {
+      if (starts(i, "$$")) { opener <- "$$"; closer <- "$$"; display <- TRUE
+      } else if (chars[i] == "$" && i < n && !grepl("[[:space:]]", chars[i + 1L])) {
+        opener <- "$"; closer <- "$"
+      } else if (starts(i, "\\(")) { opener <- "\\("; closer <- "\\)"
+      } else if (starts(i, "\\[")) { opener <- "\\["; closer <- "\\]"; display <- TRUE
+      } else if (starts(i, "\\begin{")) {
+        env <- regmatches(cut(i, n), regexpr("^\\\\begin\\{[A-Za-z*]+\\}", cut(i, n)))
+        if (length(env) && nzchar(env)) {
+          name <- sub("^\\\\begin\\{([^}]+)\\}$", "\\1", env)
+          if (name %in% c("equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*")) {
+            opener <- env; closer <- paste0("\\end{", name, "}"); display <- TRUE
+          } else add_diag("latex_environment_limited", i, "Unsupported bare LaTeX environment retained as text.")
+        }
+      }
+    }
+    if (nzchar(opener)) {
+      flush(i)
+      close <- find_close(i + nchar(opener), closer, if (display) n else end)
+      # A single-dollar closer must not be a display delimiter or follow whitespace.
+      if (opener == "$") {
+        while (!is.na(close) && (starts(close, "$$") ||
+          (close > 1L && chars[close - 1L] == "$") ||
+          grepl("[[:space:]]", chars[close - 1L])))
+          close <- find_close(close + 1L, closer, end)
+      }
+      if (is.na(close)) {
+        b <- if (display) n else end
+        emit("math", i, b, i + nchar(opener), b, status = "limited")
+        add_diag("unclosed_math", i, "Math delimiter is not closed within its supported scope; retained as limited math.")
+        i <- b + 1L
+      } else {
+        emit("math", i, close + nchar(closer) - 1L, i + nchar(opener), close - 1L)
+        i <- close + nchar(closer)
+      }
+      next
+    }
+    if (is.na(pending)) pending <- i
+    i <- i + 1L
+  }
+  flush(n + 1L)
+  if (n == 0L) add_diag("empty_document", 1L, "Document is empty.")
+  u <- if (length(units)) do.call(rbind, units) else rmd_empty_units()
+  d <- if (length(diagnostics)) do.call(rbind, diagnostics) else rmd_empty_diagnostics()
+  structure(list(file_id = file_id, source = source, units = u, diagnostics = d,
+    summary = list(characters = n, units = nrow(u), limited_units = sum(u$status == "limited"),
+      text_units = sum(u$type == "text"), math_units = sum(u$type == "math"),
+      code_units = sum(u$type %in% c("code", "inline_r")))), class = "rmd_document")
+}
+
+read_rmd <- function(path, file_id = basename(path), encoding = "UTF-8") {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path))
+    stop("path must be one non-empty local file path.")
+  if (!file.exists(path) || dir.exists(path)) stop("Input file does not exist or is a directory: ", path)
+  if (!grepl("\\.rmd$", path, ignore.case = TRUE)) stop("Input must have an .Rmd extension.")
+  con <- file(path, "rb"); on.exit(close(con))
+  bytes <- readBin(con, "raw", n = file.info(path)$size)
+  if (any(bytes == as.raw(0L))) stop("Input contains NUL bytes; choose a supported text encoding (not UTF-16).")
+  raw_text <- rawToChar(bytes)
+  text <- iconv(raw_text, from = encoding, to = "UTF-8", sub = NA)
+  if (is.na(text)) stop("Input cannot be decoded with encoding=", encoding, "; specify the correct encoding.")
+  result <- parse_rmd_text(text, file_id)
+  result$encoding <- encoding
+  result
+}
+# END R/parser.R
+
+# BEGIN R/text.R
+# 从解析结果中提取可比较的正文单元
+extract_text_units <- function(doc) {
+
+  # 检查输入是否来自项目解析器
+  if (!inherits(doc, "rmd_document")) {
+    stop("doc must be an rmd_document returned by the parser.")
+  }
+
+  # 只选择已正常解析的正文
+  selected <- doc$units$type == "text" &
+    doc$units$status == "ok"
+
+  # 保留全部字段，包括原文、位置和上下文
+  doc$units[selected, , drop = FALSE]
+}
+# 去除空白，并记录每个保留字符在输入字符串中的位置
+normalize_text <- function(text) {
+
+  # 只接受一个非缺失字符串
+  if (!is.character(text) ||
+      length(text) != 1L ||
+      is.na(text)) {
+    stop("text must be one non-missing character string.")
+  }
+
+  # 拆成字符向量
+  chars <- strsplit(
+    enc2utf8(text),
+    split = "",
+    fixed = TRUE
+  )[[1L]]
+
+  # 本版本明确处理的空白字符
+  whitespace <- c(
+    " ", "\t", "\n", "\r", "\f", "\v",
+    "\u00a0",  # 不换行空格
+    "\u3000"   # 全角空格
+  )
+
+  # 哪些字符需要保留
+  keep <- !(chars %in% whitespace)
+
+  # 保留字符原本的位置
+  source_positions <- seq_along(chars)[keep]
+
+  list(
+    text = paste0(chars[keep], collapse = ""),
+    source_positions = source_positions
+  )
+}
+
+# Identify removable Markdown characters without editing the source itself.
+# Conservative subset: paired emphasis/strike, line prefixes and ASCII escapes.
+markdown_drop_positions <- function(doc) {
+  u <- extract_text_units(doc)
+  chars <- strsplit(doc$source, "", fixed = TRUE)[[1L]]
+  n <- length(chars)
+  if (!n || !nrow(u)) return(integer())
+  eligible <- rep(FALSE, n)
+  for (i in seq_len(nrow(u))) {
+    if (u$content_start[i] <= u$content_end[i])
+      eligible[seq.int(u$content_start[i], u$content_end[i])] <- TRUE
+  }
+  drop <- rep(FALSE, n)
+  # Protected content occupies its original width, but cannot supply delimiters.
+  masked <- chars
+  masked[!eligible & chars != "\n"] <- "\ufffc"
+  escaped <- function(at) {
+    j <- at - 1L; count <- 0L
+    while (j >= 1L && chars[j] == "\\") { count <- count + 1L; j <- j - 1L }
+    count %% 2L == 1L
+  }
+  ascii_punctuation <- c("!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",",
+    "-", ".", "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~")
+  for (p in seq_len(n)) {
+    if (eligible[p] && chars[p] == "\\" && !escaped(p) && p < n &&
+        eligible[p + 1L] && chars[p + 1L] %in% ascii_punctuation)
+      drop[p] <- TRUE
+  }
+  # Recognise quote/list prefixes only at real source line starts.
+  starts <- c(1L, which(chars == "\n") + 1L)
+  for (li in seq_along(starts)) {
+    s <- starts[li]
+    e <- if (li < length(starts)) starts[li + 1L] - 2L else n
+    if (s > e) next
+    used <- 0L
+    repeat {
+      p <- s + used
+      if (p > e) break
+      line <- paste0(masked[seq.int(p, e)], collapse = "")
+      found <- regexpr("^ {0,3}(?:>[ \t]?|(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)", line, perl = TRUE)
+      if (found[1L] < 0L) break
+      width <- attr(found, "match.length")
+      ids <- seq.int(p, p + width - 1L)
+      if (!all(eligible[ids])) break
+      drop[ids] <- TRUE
+      used <- used + width
+    }
+  }
+  whitespace <- function(ch) ch %in% c(" ", "\t", "\n", "\r", "\f", "\v", "\u00a0", "\u3000")
+  word <- function(ch) grepl("^[\\p{L}\\p{N}]$", ch, perl = TRUE)
+  # Pair delimiters within the same paragraph context, including around protected
+  # inline math/code, but never use delimiters from inside that protected content.
+  for (indices in split(seq_len(nrow(u)), u$context_id)) {
+    valid <- indices[u$content_start[indices] <= u$content_end[indices]]
+    if (!length(valid)) next
+    lo <- min(u$content_start[valid]); hi <- max(u$content_end[valid])
+    stack <- list(); p <- lo
+    while (p <= hi) {
+      marker <- masked[p]
+      if (!eligible[p] || drop[p] || !marker %in% c("*", "_", "~")) {
+        p <- p + 1L; next
+      }
+      j <- p
+      while (j <= hi && masked[j] == marker) j <- j + 1L
+      width <- j - p
+      supported <- if (marker == "~") width == 2L else width %in% 1:3
+      if (!supported || escaped(p)) { p <- j; next }
+      key <- paste0(marker, width)
+      can_open <- j <= hi && !whitespace(masked[j])
+      can_close <- p > lo && !whitespace(masked[p - 1L])
+      if (marker == "_") {
+        if (p > lo && word(masked[p - 1L])) can_open <- FALSE
+        if (j <= hi && word(masked[j])) can_close <- FALSE
+      }
+      top <- length(stack)
+      if (can_close && top > 0L && identical(stack[[top]]$key, key)) {
+        opening <- stack[[top]]$positions
+        drop[c(opening, seq.int(p, j - 1L))] <- TRUE
+        stack <- stack[-top]
+      } else if (can_open) {
+        stack[[top + 1L]] <- list(key = key, positions = seq.int(p, j - 1L))
+      }
+      p <- j
+    }
+  }
+  which(drop)
+}
+
+# 提取并规范化正文，将字符位置映射回文档
+prepare_text_units <- function(doc) {
+
+  units <- extract_text_units(doc)
+
+  # 先排除已识别的排版标记，再去空白；始终保留原字符位置。
+  dropped <- markdown_drop_positions(doc)
+  normalized <- lapply(seq_len(nrow(units)), function(i) {
+    chars <- strsplit(units$content[i], "", fixed = TRUE)[[1L]]
+    positions <- as.integer(units$content_start[i] + seq_along(chars) - 1L)
+    keep <- !positions %in% dropped
+    result <- normalize_text(paste0(chars[keep], collapse = ""))
+    list(text = result$text,
+      source_positions = positions[keep][result$source_positions])
+  })
+
+  # 每个单元对应一个规范化字符串
+  units$normalized_text <- vapply(
+    normalized,
+    function(item) item$text,
+    character(1)
+  )
+
+  # 此处已经是文档位置；不能再次添加content_start。
+  positions <- lapply(normalized, function(item) item$source_positions)
+
+  # 每行保存长度可能不同的位置向量
+  units$source_positions <- I(positions)
+
+  units
+}
+
+# 将字符串切成固定长度的连续字符片段
+make_character_ngrams <- function(text, k = 5L) {
+
+  if (!is.character(text) ||
+      length(text) != 1L ||
+      is.na(text)) {
+    stop("text must be one non-missing character string.")
+  }
+
+  # k必须是可表示的正整数
+  if (!is.numeric(k) ||
+      length(k) != 1L ||
+      is.na(k) ||
+      !is.finite(k) ||
+      k < 1 ||
+      k != floor(k) ||
+      k > .Machine$integer.max) {
+    stop("k must be a positive integer.")
+  }
+
+  k <- as.integer(k)
+  text <- enc2utf8(text)
+  n <- nchar(text, type = "chars")
+
+  # 无法组成完整片段时，返回结构一致的空表
+  if (n < k) {
+    return(data.frame(
+      gram = character(),
+      start = integer(),
+      end = integer(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  starts <- seq_len(n - k + 1L)
+  ends <- starts + k - 1L
+
+  data.frame(
+    gram = substring(text, starts, ends),
+    start = starts,
+    end = ends,
+    stringsAsFactors = FALSE
+  )
+}
+
+# 为整份文档生成正文片段，并保留原文字符位置
+make_document_ngrams <- function(doc, k = 5L) {
+
+  units <- prepare_text_units(doc)
+
+  # 即使没有正文，也要验证k，并建立稳定的空表结构
+  empty_grams <- make_character_ngrams("", k = k)
+
+  empty_result <- data.frame(
+    file_id = character(),
+    unit_id = character(),
+    context_id = character(),
+    gram = empty_grams$gram,
+    normalized_start = empty_grams$start,
+    normalized_end = empty_grams$end,
+    stringsAsFactors = FALSE
+  )
+
+  empty_result$source_positions <- I(vector("list", 0L))
+
+  parts <- list()
+
+  for (i in seq_len(nrow(units))) {
+
+    grams <- make_character_ngrams(
+      units$normalized_text[i],
+      k = k
+    )
+
+    # 当前单元太短时，不生成片段
+    if (nrow(grams) == 0L) {
+      next
+    }
+
+    part <- data.frame(
+      file_id = units$file_id[i],
+      unit_id = units$unit_id[i],
+      context_id = units$context_id[i],
+      gram = grams$gram,
+      normalized_start = grams$start,
+      normalized_end = grams$end,
+      stringsAsFactors = FALSE
+    )
+
+    # 从已有映射中取出每个片段对应的文档字符位置
+    positions <- lapply(seq_len(nrow(grams)), function(j) {
+      indices <- seq.int(
+        grams$start[j],
+        grams$end[j]
+      )
+
+      units$source_positions[[i]][indices]
+    })
+
+    part$source_positions <- I(positions)
+
+    parts[[length(parts) + 1L]] <- part
+  }
+
+  if (length(parts) == 0L) {
+    return(empty_result)
+  }
+
+  result <- do.call(rbind, parts)
+  rownames(result) <- NULL
+
+  result
+}
+
+# 比较两份文档的正文字符片段集合
+compare_text_jaccard <- function(doc_a, doc_b, k = 5L) {
+
+  grams_a <- make_document_ngrams(doc_a, k = k)
+  grams_b <- make_document_ngrams(doc_b, k = k)
+
+  # 集合比较：相同片段只保留一次
+  set_a <- unique(grams_a$gram)
+  set_b <- unique(grams_b$gram)
+
+  shared <- intersect(set_a, set_b)
+  combined <- union(set_a, set_b)
+
+  enough <- length(set_a) > 0L && length(set_b) > 0L
+
+  similarity <- if (enough) {
+    length(shared) / length(combined)
+  } else {
+    NA_real_
+  }
+
+  list(
+    similarity = similarity,
+    status = if (enough) "ok" else "insufficient_ngrams",
+    k = as.integer(k),
+    unique_count_a = length(set_a),
+    unique_count_b = length(set_b),
+    shared_count = length(shared),
+    union_count = length(combined)
+  )
+}
+
+# 找到两份文档中内容完全相同的字符片段
+match_text_ngrams <- function(
+    doc_a, doc_b, k = 5L, max_pairs = 50000L) {
+
+  if (!is.numeric(max_pairs) ||
+      length(max_pairs) != 1L ||
+      is.na(max_pairs) ||
+      !is.finite(max_pairs) ||
+      max_pairs < 1 ||
+      max_pairs != floor(max_pairs)) {
+    stop("max_pairs must be a positive integer.")
+  }
+
+  grams_a <- make_document_ngrams(doc_a, k = k)
+  grams_b <- make_document_ngrams(doc_b, k = k)
+
+  # 计算重复片段展开后，会产生多少对匹配
+  counts_a <- table(grams_a$gram)
+  counts_b <- table(grams_b$gram)
+
+  shared <- intersect(names(counts_a), names(counts_b))
+
+  pair_count <- sum(
+    as.double(counts_a[shared]) *
+      as.double(counts_b[shared])
+  )
+
+  # 防止大量重复片段产生过大的结果，不静默丢弃匹配
+  if (pair_count > max_pairs) {
+    stop(
+      "Matching pairs exceed max_pairs. ",
+      "Use a larger k or explicitly increase max_pairs."
+    )
+  }
+
+  matches <- merge(
+    grams_a,
+    grams_b,
+    by = "gram",
+    suffixes = c("_a", "_b"),
+    sort = FALSE
+  )
+
+  # 按两侧出现位置排序，方便检查
+  matches <- matches[
+    order(
+      matches$unit_id_a,
+      matches$normalized_start_a,
+      matches$unit_id_b,
+      matches$normalized_start_b
+    ),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(matches) <- NULL
+
+  matches
+}
+# END R/text.R
+
+# BEGIN R/text-matches.R
+# Exact normalized text matching. Load parser.R and text.R first.
+
+empty_text_blocks <- function() {
+  out <- data.frame(
+    match_id = character(), file_id_a = character(), file_id_b = character(),
+    unit_id_a = character(), unit_id_b = character(), text = character(),
+    matched_chars = integer(), normalized_start_a = integer(),
+    normalized_end_a = integer(), normalized_start_b = integer(),
+    normalized_end_b = integer(), start_line_a = integer(), end_line_a = integer(),
+    start_line_b = integer(), end_line_b = integer(), stringsAsFactors = FALSE
+  )
+  out$source_positions_a <- I(vector("list", 0L))
+  out$source_positions_b <- I(vector("list", 0L))
+  out
+}
+
+# Merge overlapping/adjacent seeds with the same unit pair and alignment shift.
+merge_exact_text_matches <- function(
+    doc_a, doc_b, k = 5L, min_chars = 30L, max_pairs = 50000L) {
+  if (!is.numeric(min_chars) || length(min_chars) != 1L ||
+      is.na(min_chars) || !is.finite(min_chars) || min_chars < 1 ||
+      min_chars != floor(min_chars) || min_chars > .Machine$integer.max) {
+    stop("min_chars must be a positive integer.")
+  }
+  hits <- match_text_ngrams(doc_a, doc_b, k = k, max_pairs = max_pairs)
+  if (!nrow(hits)) return(empty_text_blocks())
+  a <- prepare_text_units(doc_a); b <- prepare_text_units(doc_b)
+  rows <- list()
+  # which() handles a newline at position 1 correctly, including empty sources.
+  line_starts <- function(text) {
+    chars <- strsplit(text, "", fixed = TRUE)[[1L]]
+    c(1L, which(chars == "\n") + 1L)
+  }
+  lines_a <- line_starts(doc_a$source)
+  lines_b <- line_starts(doc_b$source)
+
+  emit <- function(ia, ib, sa, ea, sb, eb) {
+    len <- ea - sa + 1L
+    if (len < min_chars) return(invisible(NULL))
+    ta <- substr(a$normalized_text[ia], sa, ea)
+    tb <- substr(b$normalized_text[ib], sb, eb)
+    if (!identical(ta, tb)) stop("Internal error: merged text does not agree.")
+    pa <- a$source_positions[[ia]][seq.int(sa, ea)]
+    pb <- b$source_positions[[ib]][seq.int(sb, eb)]
+    row <- data.frame(
+      match_id = "", file_id_a = doc_a$file_id, file_id_b = doc_b$file_id,
+      unit_id_a = a$unit_id[ia], unit_id_b = b$unit_id[ib], text = ta,
+      matched_chars = as.integer(len), normalized_start_a = as.integer(sa),
+      normalized_end_a = as.integer(ea), normalized_start_b = as.integer(sb),
+      normalized_end_b = as.integer(eb),
+      start_line_a = as.integer(findInterval(pa[1L], lines_a)),
+      end_line_a = as.integer(findInterval(tail(pa, 1L), lines_a)),
+      start_line_b = as.integer(findInterval(pb[1L], lines_b)),
+      end_line_b = as.integer(findInterval(tail(pb, 1L), lines_b)),
+      stringsAsFactors = FALSE
+    )
+    row$source_positions_a <- I(list(pa))
+    row$source_positions_b <- I(list(pb))
+    rows[[length(rows) + 1L]] <<- row
+  }
+
+  shift <- hits$normalized_start_b - hits$normalized_start_a
+  keys <- paste(hits$unit_id_a, hits$unit_id_b, shift, sep = ":")
+  groups <- split(seq_len(nrow(hits)), keys)
+  for (indices in groups) {
+    g <- hits[indices, , drop = FALSE]
+    g <- g[order(g$normalized_start_a), , drop = FALSE]
+    ia <- match(g$unit_id_a[1L], a$unit_id)
+    ib <- match(g$unit_id_b[1L], b$unit_id)
+    sa <- g$normalized_start_a[1L]; ea <- g$normalized_end_a[1L]
+    sb <- g$normalized_start_b[1L]; eb <- g$normalized_end_b[1L]
+    for (j in seq_len(nrow(g))[-1L]) {
+      if (g$normalized_start_a[j] <= ea + 1L) {
+        ea <- max(ea, g$normalized_end_a[j])
+        eb <- max(eb, g$normalized_end_b[j])
+      } else {
+        emit(ia, ib, sa, ea, sb, eb)
+        sa <- g$normalized_start_a[j]; ea <- g$normalized_end_a[j]
+        sb <- g$normalized_start_b[j]; eb <- g$normalized_end_b[j]
+      }
+    }
+    emit(ia, ib, sa, ea, sb, eb)
+  }
+  if (!length(rows)) return(empty_text_blocks())
+  out <- do.call(rbind, rows)
+  out <- out[order(-out$matched_chars, out$unit_id_a,
+    out$normalized_start_a, out$unit_id_b, out$normalized_start_b), , drop = FALSE]
+  rownames(out) <- NULL
+  out$match_id <- sprintf("m%05d", seq_len(nrow(out)))
+  out
+}
+
+# Coverage uses actual source character sets, not lengths of bounding intervals.
+summarize_text_coverage <- function(doc_a, doc_b, blocks) {
+  if (!is.data.frame(blocks) ||
+      !all(c("source_positions_a", "source_positions_b") %in% names(blocks))) {
+    stop("blocks must be a text block table with both position columns.")
+  }
+  positions <- function(x) sort(unique(as.integer(unlist(x, use.names = FALSE))))
+  valid_a <- positions(prepare_text_units(doc_a)$source_positions)
+  valid_b <- positions(prepare_text_units(doc_b)$source_positions)
+  matched_a <- positions(blocks$source_positions_a)
+  matched_b <- positions(blocks$source_positions_b)
+  if (!all(matched_a %in% valid_a) || !all(matched_b %in% valid_b)) {
+    stop("Matched positions must belong to comparable text in each document.")
+  }
+  total <- c(length(valid_a), length(valid_b))
+  covered <- c(length(matched_a), length(matched_b))
+  ratio <- rep(NA_real_, 2L)
+  ratio[total > 0L] <- covered[total > 0L] / total[total > 0L]
+  data.frame(side = c("A", "B"), file_id = c(doc_a$file_id, doc_b$file_id),
+    comparable_chars = total, matched_chars = covered, coverage = ratio,
+    status = ifelse(total > 0L, "ok", "no_comparable_text"),
+    stringsAsFactors = FALSE)
+}
+
+# This is a text-only analysis, not a plagiarism verdict.
+analyze_text_pair <- function(
+    doc_a, doc_b, k = 5L, min_chars = 30L, max_pairs = 50000L) {
+  jaccard <- compare_text_jaccard(doc_a, doc_b, k = k)
+  blocks <- merge_exact_text_matches(doc_a, doc_b, k, min_chars, max_pairs)
+  coverage <- summarize_text_coverage(doc_a, doc_b, blocks)
+  has_warnings <- any(doc_a$diagnostics$severity == "warning") ||
+    any(doc_b$diagnostics$severity == "warning")
+  status <- if (jaccard$status != "ok") "insufficient_ngrams" else
+    if (has_warnings) "limited" else "ok"
+  list(status = status,
+    parameters = list(k = as.integer(k), min_chars = as.integer(min_chars),
+      max_pairs = max_pairs),
+    jaccard = jaccard, exact_matches = blocks, coverage = coverage,
+    diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
+}
+# END R/text-matches.R
+
+# BEGIN R/text-approx.R
+# Seed/window candidates and local alignment. Base R, no network or evaluation.
+# Load parser.R, text.R and text-matches.R first.
+
+text_positive_integer <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x < 1 || x != floor(x) || x > .Machine$integer.max)
+    stop(name, " must be a positive integer.")
+  as.integer(x)
+}
+
+make_text_windows <- function(doc, window_size = 200L, max_windows = 2000L) {
+  size <- text_positive_integer(window_size, "window_size")
+  limit <- text_positive_integer(max_windows, "max_windows")
+  u <- prepare_text_units(doc)
+  out <- data.frame(window_id = character(), unit_id = character(),
+    start = integer(), end = integer(), text = character(), stringsAsFactors = FALSE)
+  out$source_positions <- I(vector("list", 0L))
+  rows <- list(); step <- max(1L, size %/% 2L)
+  for (i in seq_len(nrow(u))) {
+    n <- nchar(u$normalized_text[i], type = "chars")
+    if (!n) next
+    last <- max(1L, n - size + 1L)
+    starts <- unique(c(seq.int(1L, last, by = step), last))
+    if (length(rows) + length(starts) > limit)
+      stop("Window count exceeds max_windows; no partial result produced.")
+    for (s in starts) {
+      e <- min(n, s + size - 1L)
+      row <- data.frame(window_id = sprintf("w%05d", length(rows) + 1L),
+        unit_id = u$unit_id[i], start = as.integer(s), end = as.integer(e),
+        text = substr(u$normalized_text[i], s, e), stringsAsFactors = FALSE)
+      row$source_positions <- I(list(u$source_positions[[i]][seq.int(s, e)]))
+      rows[[length(rows) + 1L]] <- row
+    }
+  }
+  if (!length(rows)) return(out)
+  result <- do.call(rbind, rows); rownames(result) <- NULL
+  result
+}
+
+select_text_candidates <- function(windows_a, windows_b, seed_k = 3L,
+    max_candidates = 500L, max_seed_pairs = 100000L) {
+  k <- text_positive_integer(seed_k, "seed_k")
+  limit <- text_positive_integer(max_candidates, "max_candidates")
+  seed_limit <- text_positive_integer(max_seed_pairs, "max_seed_pairs")
+  index <- function(w) {
+    rows <- lapply(seq_len(nrow(w)), function(i) {
+      g <- unique(make_character_ngrams(w$text[i], k)$gram)
+      data.frame(gram = g, window = rep.int(i, length(g)), stringsAsFactors = FALSE)
+    })
+    if (!length(rows)) return(data.frame(gram = character(), window = integer()))
+    do.call(rbind, rows)
+  }
+  a <- index(windows_a); b <- index(windows_b)
+  ca <- table(a$gram); cb <- table(b$gram)
+  common <- intersect(names(ca), names(cb))
+  seed_pairs <- sum(as.double(ca[common]) * as.double(cb[common]))
+  if (seed_pairs > seed_limit)
+    stop("Shared-seed combinations exceed max_seed_pairs; no partial result produced.")
+  if (!seed_pairs) return(data.frame(window_a = integer(), window_b = integer(), shared_seeds = integer()))
+  hits <- merge(a, b, by = "gram", suffixes = c("_a", "_b"), sort = FALSE)
+  pairs <- aggregate(rep.int(1L, nrow(hits)),
+    by = list(window_a = hits$window_a, window_b = hits$window_b), FUN = sum)
+  names(pairs)[3L] <- "shared_seeds"
+  if (nrow(pairs) > limit)
+    stop("Candidate count exceeds max_candidates; no partial result produced.")
+  pairs <- pairs[order(-pairs$shared_seeds, pairs$window_a, pairs$window_b), , drop = FALSE]
+  rownames(pairs) <- NULL
+  pairs
+}
+
+# One best local alignment per pair. Fixed scores: equal +2, replace -1, gap -2.
+# Equal-score ties prefer reset, diagonal, consume A, then consume B; earliest maximum wins.
+align_text_local <- function(text_a, text_b, max_cells = 250000L) {
+  validate <- function(x) {
+    if (!is.character(x) || length(x) != 1L || is.na(x))
+      stop("Alignment inputs must be single non-missing strings.")
+    strsplit(enc2utf8(x), "", fixed = TRUE)[[1L]]
+  }
+  a <- validate(text_a); b <- validate(text_b)
+  limit <- text_positive_integer(max_cells, "max_cells")
+  n <- length(a); m <- length(b)
+  empty <- list(score = 0, similarity = NA_real_, equal_chars = 0L,
+    columns = 0L, indices_a = integer(), indices_b = integer(),
+    operations = character(), aligned_a = "", aligned_b = "")
+  if (!n || !m) return(empty)
+  if ((as.double(n) + 1) * (as.double(m) + 1) > limit)
+    stop("Alignment matrix exceeds max_cells.")
+  h <- matrix(0, n + 1L, m + 1L)
+  trace <- matrix(0L, n + 1L, m + 1L)
+  best <- 0; best_i <- 0L; best_j <- 0L
+  for (i in seq_len(n)) for (j in seq_len(m)) {
+    values <- c(0, h[i, j] + if (a[i] == b[j]) 2 else -1,
+      h[i, j + 1L] - 2, h[i + 1L, j] - 2)
+    choice <- which.max(values)
+    h[i + 1L, j + 1L] <- values[choice]
+    trace[i + 1L, j + 1L] <- choice - 1L
+    if (values[choice] > best) {
+      best <- values[choice]; best_i <- i; best_j <- j
+    }
+  }
+  if (!best) return(empty)
+  i <- best_i; j <- best_j; ia <- integer(); ib <- integer(); ops <- character()
+  while (i > 0L && j > 0L && h[i + 1L, j + 1L] > 0) {
+    move <- trace[i + 1L, j + 1L]
+    if (move == 1L) {
+      ia <- c(ia, i); ib <- c(ib, j)
+      ops <- c(ops, if (a[i] == b[j]) "equal" else "replace")
+      i <- i - 1L; j <- j - 1L
+    } else if (move == 2L) {
+      ia <- c(ia, i); ib <- c(ib, NA_integer_); ops <- c(ops, "consume_a")
+      i <- i - 1L
+    } else if (move == 3L) {
+      ia <- c(ia, NA_integer_); ib <- c(ib, j); ops <- c(ops, "consume_b")
+      j <- j - 1L
+    } else break
+  }
+  ia <- rev(ia); ib <- rev(ib); ops <- rev(ops)
+  shown_a <- rep("-", length(ia)); shown_b <- rep("-", length(ib))
+  shown_a[!is.na(ia)] <- a[ia[!is.na(ia)]]
+  shown_b[!is.na(ib)] <- b[ib[!is.na(ib)]]
+  list(score = best, similarity = sum(ops == "equal") / length(ops),
+    equal_chars = as.integer(sum(ops == "equal")), columns = length(ops),
+    indices_a = ia, indices_b = ib, operations = ops,
+    aligned_a = paste0(shown_a, collapse = ""), aligned_b = paste0(shown_b, collapse = ""))
+}
+
+empty_approximate_matches <- function() {
+  out <- data.frame(match_id = character(), unit_id_a = character(),
+    unit_id_b = character(), text_a = character(), text_b = character(),
+    aligned_a = character(), aligned_b = character(), equal_chars = integer(),
+    alignment_columns = integer(), similarity = numeric(), score = numeric(),
+    start_line_a = integer(), end_line_a = integer(), start_line_b = integer(),
+    end_line_b = integer(), stringsAsFactors = FALSE)
+  for (name in c("source_positions_a", "source_positions_b",
+      "aligned_positions_a", "aligned_positions_b", "operations"))
+    out[[name]] <- I(vector("list", 0L))
+  out
+}
+
+find_approximate_text_matches <- function(doc_a, doc_b, seed_k = 3L,
+    window_size = 200L, min_chars = 30L, min_similarity = 0.8,
+    max_windows = 2000L, max_candidates = 500L, max_seed_pairs = 100000L,
+    max_cells = 250000L, max_total_cells = 5000000L) {
+  minimum <- text_positive_integer(min_chars, "min_chars")
+  seed_k <- text_positive_integer(seed_k, "seed_k")
+  cells_limit <- text_positive_integer(max_cells, "max_cells")
+  total_limit <- text_positive_integer(max_total_cells, "max_total_cells")
+  if (!is.numeric(min_similarity) || length(min_similarity) != 1L ||
+      is.na(min_similarity) || !is.finite(min_similarity) ||
+      min_similarity < 0 || min_similarity > 1)
+    stop("min_similarity must be between 0 and 1.")
+  wa <- make_text_windows(doc_a, window_size, max_windows)
+  wb <- make_text_windows(doc_b, window_size, max_windows)
+  candidates <- select_text_candidates(wa, wb, seed_k, max_candidates, max_seed_pairs)
+  sizes <- (nchar(wa$text[candidates$window_a]) + 1) *
+    (nchar(wb$text[candidates$window_b]) + 1)
+  if (any(sizes > cells_limit) || sum(sizes) > total_limit)
+    stop("Alignment work exceeds max_cells or max_total_cells; no partial result produced.")
+  lines <- function(text) c(1L, which(strsplit(text, "", fixed = TRUE)[[1L]] == "\n") + 1L)
+  la <- lines(doc_a$source); lb <- lines(doc_b$source); rows <- list()
+  for (i in seq_len(nrow(candidates))) {
+    a <- wa[candidates$window_a[i], , drop = FALSE]
+    b <- wb[candidates$window_b[i], , drop = FALSE]
+    aligned <- align_text_local(a$text, b$text, max_cells = cells_limit)
+    if (aligned$equal_chars < minimum || is.na(aligned$similarity) ||
+        aligned$similarity < min_similarity) next
+    pa <- a$source_positions[[1L]][aligned$indices_a]
+    pb <- b$source_positions[[1L]][aligned$indices_b]
+    equal <- aligned$operations == "equal"
+    used_a <- aligned$indices_a[!is.na(aligned$indices_a)]
+    used_b <- aligned$indices_b[!is.na(aligned$indices_b)]
+    row <- data.frame(match_id = "", unit_id_a = a$unit_id,
+      unit_id_b = b$unit_id, text_a = substr(a$text, min(used_a), max(used_a)),
+      text_b = substr(b$text, min(used_b), max(used_b)),
+      aligned_a = aligned$aligned_a, aligned_b = aligned$aligned_b,
+      equal_chars = aligned$equal_chars, alignment_columns = aligned$columns,
+      similarity = aligned$similarity, score = aligned$score,
+      start_line_a = as.integer(findInterval(min(pa, na.rm = TRUE), la)),
+      end_line_a = as.integer(findInterval(max(pa, na.rm = TRUE), la)),
+      start_line_b = as.integer(findInterval(min(pb, na.rm = TRUE), lb)),
+      end_line_b = as.integer(findInterval(max(pb, na.rm = TRUE), lb)), stringsAsFactors = FALSE)
+    # Only truly equal aligned characters contribute to the coverage numerator.
+    row$source_positions_a <- I(list(pa[equal]))
+    row$source_positions_b <- I(list(pb[equal]))
+    row$aligned_positions_a <- I(list(pa))
+    row$aligned_positions_b <- I(list(pb))
+    row$operations <- I(list(aligned$operations))
+    rows[[length(rows) + 1L]] <- row
+  }
+  out <- if (length(rows)) do.call(rbind, rows) else empty_approximate_matches()
+  if (nrow(out)) {
+    keys <- vapply(seq_len(nrow(out)), function(i) paste(out$unit_id_a[i],
+      out$unit_id_b[i], paste(out$source_positions_a[[i]], collapse = ","),
+      paste(out$source_positions_b[[i]], collapse = ","), sep = ":"), character(1))
+    ord <- order(-out$similarity, -out$equal_chars, -out$score)
+    out <- out[ord, , drop = FALSE]; keys <- keys[ord]
+    out <- out[!duplicated(keys), , drop = FALSE]
+    out$match_id <- sprintf("a%05d", seq_len(nrow(out))); rownames(out) <- NULL
+  }
+  enough <- any(nchar(wa$text) >= seed_k) && any(nchar(wb$text) >= seed_k)
+  list(status = if (enough) "ok" else "insufficient_ngrams", matches = out,
+    candidates = candidates, windows_a = nrow(wa), windows_b = nrow(wb),
+    alignment_cells = sum(sizes))
+}
+
+analyze_text_pair_approx <- function(doc_a, doc_b, k = 5L, min_chars = 30L,
+    min_similarity = 0.8, seed_k = 3L, window_size = 200L,
+    max_pairs = 50000L, max_windows = 2000L, max_candidates = 500L,
+    max_seed_pairs = 100000L, max_cells = 250000L, max_total_cells = 5000000L) {
+  exact <- analyze_text_pair(doc_a, doc_b, k, min_chars, max_pairs)
+  approximate <- find_approximate_text_matches(doc_a, doc_b, seed_k, window_size,
+    min_chars, min_similarity, max_windows, max_candidates, max_seed_pairs,
+    max_cells, max_total_cells)
+  columns <- c("source_positions_a", "source_positions_b")
+  combined <- rbind(exact$exact_matches[, columns, drop = FALSE],
+    approximate$matches[, columns, drop = FALSE])
+  warnings <- any(doc_a$diagnostics$severity == "warning") ||
+    any(doc_b$diagnostics$severity == "warning")
+  enough <- exact$jaccard$status == "ok" || approximate$status == "ok"
+  list(status = if (!enough) "insufficient_ngrams" else if (warnings) "limited" else "ok",
+    parameters = list(k = k, min_chars = min_chars, min_similarity = min_similarity,
+      seed_k = seed_k, window_size = window_size, max_pairs = max_pairs,
+      max_windows = max_windows, max_candidates = max_candidates,
+      max_seed_pairs = max_seed_pairs, max_cells = max_cells, max_total_cells = max_total_cells),
+    jaccard = exact$jaccard, exact_matches = exact$exact_matches,
+    approximate_matches = approximate$matches, exact_coverage = exact$coverage,
+    coverage = summarize_text_coverage(doc_a, doc_b, combined),
+    candidate_count = nrow(approximate$candidates), alignment_cells = approximate$alignment_cells,
+    diagnostics = exact$diagnostics)
+}
+# END R/text-approx.R
+
+# BEGIN R/math.R
+# Formula comparison foundation. Never evaluate TeX, R or symbolic expressions.
+math_one_string <- function(x) {
+  if (!is.character(x) || length(x) != 1L || is.na(x))
+    stop("formula must be one non-missing character string.")
+}
+
+normalize_math <- function(formula) {
+  math_one_string(formula)
+  chars <- strsplit(enc2utf8(formula), "", fixed = TRUE)[[1L]]
+  n <- length(chars)
+  if (n > 20000L) stop("Formula character limit exceeded (20000).")
+  tokens <- character(); kinds <- character(); positions <- list()
+  issues <- character(); depth <- 0L
+  add <- function(value, kind, ids) {
+    tokens <<- c(tokens, value); kinds <<- c(kinds, kind)
+    positions[[length(positions) + 1L]] <<- as.integer(ids)
+  }
+  greek <- c("alpha", "beta", "gamma", "delta", "epsilon", "varepsilon",
+    "zeta", "eta", "theta", "vartheta", "iota", "kappa", "lambda", "mu",
+    "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",
+    "tau", "upsilon", "phi", "varphi", "chi", "psi", "omega",
+    "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega")
+  layout <- c("left", "right", "big", "Big", "bigg", "Bigg", "bigl", "bigr",
+    "Bigl", "Bigr", "biggl", "biggr", "Biggl", "Biggr", "quad", "qquad", "enspace", "thinspace")
+  fixed <- c("frac", "sqrt", "sum", "prod", "int", "iint", "lim", "sin", "cos", "tan",
+    "log", "ln", "exp", "min", "max", "sup", "inf", "det", "Pr", "bar", "hat",
+    "widehat", "tilde", "widetilde", "overline", "underline", "vec", "dot", "ddot",
+    "le", "leq", "ge", "geq", "ne", "neq", "approx", "sim", "equiv", "in", "notin",
+    "subset", "subseteq", "cup", "cap", "cdot", "times", "div", "pm", "mp", "infty",
+    "partial", "nabla", "forall", "exists", "to", "rightarrow", "Rightarrow", "langle",
+    "rangle", "lvert", "rvert", "vert", "Vert", "ldots", "cdots", "dots")
+  literal <- c("text", "mathrm", "mathbf", "mathit", "mathsf", "mathtt", "mathcal", "mathbb", "operatorname")
+  p <- 1L
+  while (p <= n) {
+    ch <- chars[p]
+    if (ch %in% c(" ", "\t", "\n", "\r", "\f", "\v")) { p <- p + 1L; next }
+    if (ch == "\\") {
+      start <- p; p <- p + 1L
+      if (p > n) { issues <- c(issues, "trailing_backslash"); add("\\", "fixed", start); next }
+      if (grepl("^[A-Za-z]$", chars[p])) {
+        j <- p
+        while (p <= n && grepl("^[A-Za-z]$", chars[p])) p <- p + 1L
+        name <- paste0(chars[seq.int(j, p - 1L)], collapse = "")
+        if (name %in% layout) next
+        if (name %in% c("dfrac", "tfrac")) name <- "frac"
+        if (name %in% literal) {
+          # Preserve text/font payload literally, including words and spaces.
+          q <- p
+          while (q <= n && chars[q] %in% c(" ", "\t", "\n", "\r")) q <- q + 1L
+          if (q <= n && chars[q] == "{") {
+            level <- 1L; j <- q + 1L
+            while (j <= n && level > 0L) {
+              if (chars[j] == "\\" && j < n) { j <- j + 2L; next }
+              if (chars[j] == "{") level <- level + 1L
+              if (chars[j] == "}") level <- level - 1L
+              j <- j + 1L
+            }
+            if (level == 0L) {
+              add(paste0("\\", name), "fixed", seq.int(start, p - 1L))
+              add(paste0(chars[seq.int(q, j - 1L)], collapse = ""), "literal", seq.int(q, j - 1L))
+              p <- j; next
+            }
+          }
+          issues <- c(issues, "invalid_literal_group")
+        } else if (!name %in% c(greek, fixed)) {
+          issues <- c(issues, paste0("unsupported_command:", name))
+        }
+        add(paste0("\\", name), if (name %in% greek) "variable" else "fixed", seq.int(start, p - 1L))
+      } else {
+        symbol <- chars[p]; p <- p + 1L
+        if (symbol %in% c(",", ";", ":", "!", " ")) next
+        if (!symbol %in% c("{", "}", "_", "%", "#", "&", "$", "|"))
+          issues <- c(issues, paste0("unsupported_control_symbol:", symbol))
+        add(paste0("\\", symbol), "fixed", seq.int(start, p - 1L))
+      }
+      next
+    }
+    if (ch == "{") depth <- depth + 1L
+    if (ch == "}") {
+      depth <- depth - 1L
+      if (depth < 0L) issues <- c(issues, "unbalanced_braces")
+    }
+    if (ch %in% c("%", "#", "&", "$")) issues <- c(issues, "unsupported_tex_syntax")
+    if (!grepl("^[ -~]$", ch)) issues <- c(issues, "unsupported_non_ascii_symbol")
+    add(ch, if (grepl("^[A-Za-z]$", ch)) "variable" else "fixed", p)
+    p <- p + 1L
+  }
+  if (depth != 0L) issues <- c(issues, "unbalanced_braces")
+  # Token keys use lengths: concatenation alone could merge distinct commands.
+  key <- function(x) paste0(nchar(x, type = "chars"), ":", x, collapse = "|")
+  vars <- unique(tokens[kinds == "variable"])
+  structural <- tokens
+  selected <- kinds == "variable"
+  structural[selected] <- paste0("@v", match(tokens[selected], vars))
+  issues <- unique(issues)
+  list(raw = formula, normalized = paste0(tokens, collapse = ""), tokens = tokens,
+    kinds = kinds, source_positions = positions, normalized_key = key(tokens),
+    structure_key = if (!length(issues) && length(tokens)) key(structural) else NA_character_,
+    variables = vars, token_count = length(tokens), issues = issues,
+    status = if (length(issues)) "limited" else if (!length(tokens)) "empty" else "ok")
+}
+
+prepare_math_units <- function(doc) {
+  if (!inherits(doc, "rmd_document")) stop("doc must be an rmd_document.")
+  units <- doc$units[doc$units$type == "math", , drop = FALSE]
+  parsed <- lapply(units$content, normalize_math)
+  for (i in seq_along(parsed)) {
+    parsed[[i]]$source_positions <- lapply(parsed[[i]]$source_positions,
+      function(p) as.integer(units$content_start[i] + p - 1L))
+    if (units$status[i] != "ok") {
+      parsed[[i]]$status <- "limited"
+      parsed[[i]]$issues <- unique(c(parsed[[i]]$issues, "parser_limited"))
+      parsed[[i]]$structure_key <- NA_character_
+    }
+  }
+  units$normalized <- vapply(parsed, function(x) x$normalized, character(1))
+  units$math_status <- vapply(parsed, function(x) x$status, character(1))
+  units$token_count <- vapply(parsed, function(x) as.integer(x$token_count), integer(1))
+  units$details <- I(parsed)
+  units
+}
+
+compare_math_pair <- function(doc_a, doc_b, max_pairs = 10000L) {
+  if (!is.numeric(max_pairs) || length(max_pairs) != 1L || is.na(max_pairs) ||
+      !is.finite(max_pairs) || max_pairs < 1 || max_pairs != floor(max_pairs))
+    stop("max_pairs must be a positive integer.")
+  a <- prepare_math_units(doc_a); b <- prepare_math_units(doc_b)
+  pair_count <- as.double(nrow(a)) * nrow(b)
+  if (pair_count > max_pairs) stop("Formula pair limit exceeded.")
+  matches <- data.frame(file_id_a = character(), file_id_b = character(),
+    unit_id_a = character(), unit_id_b = character(),
+    raw_equal = logical(), normalized_equal = logical(), renamed_equal = logical(),
+    token_count = integer(), start_line_a = integer(), end_line_a = integer(),
+    start_line_b = integer(), end_line_b = integer(),
+    status = character(), stringsAsFactors = FALSE)
+  matches$variable_map <- I(list())
+  for (i in seq_len(nrow(a))) for (j in seq_len(nrow(b))) {
+    x <- a$details[[i]]; y <- b$details[[j]]
+    supported <- x$status == "ok" && y$status == "ok"
+    raw <- x$token_count > 0L && identical(x$raw, y$raw)
+    normalized <- supported && identical(x$normalized_key, y$normalized_key)
+    renamed <- supported && identical(x$structure_key, y$structure_key)
+    if (!raw && !normalized && !renamed) next
+    row <- data.frame(file_id_a = a$file_id[i], file_id_b = b$file_id[j],
+      unit_id_a = a$unit_id[i], unit_id_b = b$unit_id[j],
+      raw_equal = raw, normalized_equal = normalized, renamed_equal = renamed,
+      token_count = as.integer(min(x$token_count, y$token_count)),
+      start_line_a = a$start_line[i], end_line_a = a$end_line[i],
+      start_line_b = b$start_line[j], end_line_b = b$end_line[j],
+      status = if (supported) "ok" else "limited", stringsAsFactors = FALSE)
+    row$variable_map <- I(list(if (renamed) data.frame(a = x$variables, b = y$variables,
+      stringsAsFactors = FALSE) else data.frame(a = character(), b = character())))
+    matches <- rbind(matches, row)
+  }
+  has_math_a <- nrow(a) > 0L; has_math_b <- nrow(b) > 0L
+  limited <- any(c(a$math_status, b$math_status) == "limited") ||
+    any(c(doc_a$diagnostics$severity, doc_b$diagnostics$severity) %in% c("warning", "error"))
+  status <- if (limited) "limited" else if (!has_math_a || !has_math_b) "not_applicable" else
+    if (any(c(a$math_status, b$math_status) == "empty")) "insufficient_content" else "ok"
+  list(status = status, formulas_a = a, formulas_b = b, matches = matches,
+    pair_count = pair_count, max_pairs = max_pairs,
+    diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
+}
+
+# Return source-indexed rows. Unsupported structures remain a single barrier.
+.math_step_plan <- function(unit) {
+  chars <- strsplit(unit$content, "", fixed = TRUE)[[1L]]
+  n <- length(chars)
+  if (n > 20000L) stop("Formula character limit exceeded (20000).")
+  cut <- function(a, b) if (a > b) "" else paste0(chars[seq.int(a, b)], collapse = "")
+  ws <- c(" ", "\t", "\n", "\r", "\f", "\v")
+  escaped <- function(at) {
+    j <- at - 1L; count <- 0L
+    while (j >= 1L && chars[j] == "\\") { count <- count + 1L; j <- j - 1L }
+    count %% 2L == 1L
+  }
+  trim <- function(a, b) {
+    while (a <= b && chars[a] %in% ws) a <- a + 1L
+    while (b >= a && chars[b] %in% ws && !escaped(b)) b <- b - 1L
+    c(a, b)
+  }
+  mode <- ""; issues <- character()
+  fallback <- function(issue) list(environment = mode,
+    rows = list(list(start = 1L, end = n, drop = integer())), issues = issue)
+  supported <- c("align", "align*", "aligned", "gather", "gather*", "gathered", "equation", "equation*")
+  opening <- regmatches(unit$raw, regexpr("^\\\\begin\\{[A-Za-z*]+\\}", unit$raw))
+  if (length(opening) && nzchar(opening)) {
+    mode <- sub("^\\\\begin\\{([^}]+)\\}$", "\\1", opening)
+    if (!mode %in% supported) return(fallback("unsupported_step_environment"))
+  }
+  bounds <- trim(1L, n); lo <- bounds[1L]; hi <- bounds[2L]
+  # Permit a single row environment inside an equation wrapper, or one display wrapper.
+  repeat {
+    body <- cut(lo, hi)
+    opener <- regmatches(body, regexpr("^\\\\begin\\{[A-Za-z*]+\\}", body))
+    if (!length(opener) || !nzchar(opener)) break
+    name <- sub("^\\\\begin\\{([^}]+)\\}$", "\\1", opener)
+    if (!name %in% supported || (nzchar(mode) &&
+        !(mode %in% c("equation", "equation*") && name %in% c("aligned", "gathered"))))
+      return(fallback("unsupported_nested_environment"))
+    closer <- paste0("\\end{", name, "}")
+    if (!endsWith(body, closer) || nchar(body) < nchar(opener) + nchar(closer))
+      return(fallback("unclosed_step_environment"))
+    mode <- name
+    bounds <- trim(lo + nchar(opener), hi - nchar(closer))
+    lo <- bounds[1L]; hi <- bounds[2L]
+  }
+  row_mode <- mode %in% c("align", "align*", "aligned", "gather", "gather*", "gathered")
+  align_mode <- mode %in% c("align", "align*", "aligned")
+  rows <- list(); start <- lo; dropped <- integer(); ampersands <- 0L; depth <- 0L; p <- lo
+  emit <- function(end) {
+    bounds <- trim(start, end)
+    rows[[length(rows) + 1L]] <<- list(start = bounds[1L], end = bounds[2L], drop = dropped)
+    if (ampersands > 1L) issues <<- c(issues, "multiple_alignment_columns")
+  }
+  while (p <= hi) {
+    ch <- chars[p]
+    if (ch == "\\") {
+      if (p < hi && chars[p + 1L] == "\\") {
+        if (depth == 0L) {
+          if (!row_mode) return(fallback("row_break_outside_supported_environment"))
+          emit(p - 1L)
+          p <- p + 2L
+          if (p <= hi && chars[p] == "*") p <- p + 1L
+          if (p <= hi && chars[p] == "[") {
+            q <- p + 1L
+            while (q <= hi && chars[q] != "]") q <- q + 1L
+            spacing <- trimws(cut(p + 1L, q - 1L))
+            if (q > hi || !grepl("^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(pt|pc|bp|dd|cc|sp|mm|cm|in|em|ex)$", spacing))
+              return(fallback("unsupported_row_spacing"))
+            p <- q + 1L
+          }
+          start <- p; dropped <- integer(); ampersands <- 0L
+          next
+        }
+        p <- p + 2L; next
+      }
+      q <- p + 1L
+      while (q <= hi && grepl("^[A-Za-z]$", chars[q])) q <- q + 1L
+      command <- cut(p + 1L, q - 1L)
+      if (command %in% c("begin", "end")) return(fallback("unsupported_nested_environment"))
+      if (depth == 0L && command %in% c("notag", "nonumber"))
+        dropped <- c(dropped, seq.int(p, q - 1L))
+      p <- if (q == p + 1L) min(p + 2L, hi + 1L) else q
+      next
+    }
+    if (ch == "{") depth <- depth + 1L
+    if (ch == "}") depth <- depth - 1L
+    if (depth < 0L) return(fallback("unbalanced_step_braces"))
+    if (ch == "&" && depth == 0L) {
+      if (!align_mode) return(fallback("alignment_outside_supported_environment"))
+      ampersands <- ampersands + 1L; dropped <- c(dropped, p)
+    }
+    p <- p + 1L
+  }
+  if (depth != 0L) return(fallback("unbalanced_step_braces"))
+  last <- trim(start, hi)
+  # A trailing row break is allowed; empty internal rows are retained as barriers.
+  if (last[1L] <= last[2L] || !length(rows)) emit(hi)
+  if (any(vapply(rows, function(r) r$start > r$end, logical(1))) && length(rows) > 1L)
+    issues <- c(issues, "empty_internal_math_row")
+  list(environment = mode, rows = rows, issues = unique(issues))
+}
+
+prepare_math_steps <- function(doc, max_steps = 500L) {
+  if (!inherits(doc, "rmd_document")) stop("doc must be an rmd_document.")
+  if (!is.numeric(max_steps) || length(max_steps) != 1L || is.na(max_steps) ||
+      !is.finite(max_steps) || max_steps < 1 || max_steps != floor(max_steps) || max_steps > .Machine$integer.max)
+    stop("max_steps must be a representable positive integer.")
+  units <- doc$units[doc$units$type == "math", , drop = FALSE]
+  result <- units[FALSE, , drop = FALSE]
+  for (name in c("parent_unit_id", "parent_raw", "environment", "comparison_content", "normalized", "math_status"))
+    result[[name]] <- character()
+  result$step_index <- integer(); result$token_count <- integer()
+  result$comparison_positions <- I(list()); result$details <- I(list())
+  source_chars <- strsplit(doc$source, "", fixed = TRUE)[[1L]]
+  line_starts <- c(1L, which(source_chars == "\n") + 1L)
+  for (i in seq_len(nrow(units))) {
+    parent <- units[i, , drop = FALSE]
+    chars <- strsplit(parent$content, "", fixed = TRUE)[[1L]]
+    plan <- .math_step_plan(parent)
+    if (nrow(result) + length(plan$rows) > max_steps) stop("Expanded formula step limit exceeded.")
+    rows <- lapply(seq_along(plan$rows), function(j) {
+      span <- plan$rows[[j]]
+      ids <- if (span$start <= span$end) seq.int(span$start, span$end) else integer()
+      keep <- ids[!ids %in% span$drop]
+      raw <- paste0(chars[ids], collapse = "")
+      comparison <- paste0(chars[keep], collapse = "")
+      positions <- as.integer(parent$content_start + keep - 1L)
+      details <- normalize_math(comparison)
+      details$source_positions <- lapply(details$source_positions, function(p) positions[p])
+      details$comparison_content <- comparison; details$raw <- raw
+      row <- parent
+      row$parent_unit_id <- parent$unit_id; row$parent_raw <- parent$raw
+      row$environment <- plan$environment; row$step_index <- as.integer(j)
+      if (nzchar(plan$environment) || length(plan$rows) > 1L)
+        row$unit_id <- paste0(parent$unit_id, ":s", sprintf("%03d", j))
+      row$content_start <- as.integer(parent$content_start + span$start - 1L)
+      row$content_end <- as.integer(parent$content_start + span$end - 1L)
+      row$start_offset <- row$content_start; row$end_offset <- row$content_end
+      row$start_line <- as.integer(findInterval(row$start_offset, line_starts))
+      row$end_line <- as.integer(findInterval(max(row$start_offset, row$end_offset), line_starts))
+      row$start_column <- as.integer(row$start_offset - line_starts[row$start_line] + 1L)
+      row$end_column <- as.integer(row$end_offset - line_starts[row$end_line] + 1L)
+      row$raw <- raw; row$content <- raw; row$comparison_content <- comparison
+      row$normalized <- details$normalized; row$math_status <- details$status
+      row$token_count <- as.integer(details$token_count)
+      row$comparison_positions <- I(list(positions)); row$details <- I(list(details))
+      row[, names(result), drop = FALSE]
+    })
+    issues <- unique(c(plan$issues, if (parent$status != "ok") "parser_limited",
+      unlist(lapply(rows, function(r) r$details[[1L]]$issues), use.names = FALSE)))
+    if (length(rows) > 1L && any(vapply(rows, function(r) r$math_status == "empty", logical(1))))
+      issues <- unique(c(issues, "empty_internal_math_row"))
+    # Any unsupported row limits the whole parent; do not silently salvage it.
+    if (length(issues)) rows <- lapply(rows, function(row) {
+      row$math_status <- "limited"; row$details[[1L]]$status <- "limited"
+      row$details[[1L]]$issues <- issues; row$details[[1L]]$structure_key <- NA_character_
+      row
+    })
+    for (row in rows) result <- rbind(result, row)
+  }
+  rownames(result) <- NULL
+  result
+}
+# END R/math.R
+
+# BEGIN R/math-sequences.R
+# Requires parser.R and math.R. Steps include supported multiline rows.
+math_sequence_integer <- function(x, name, zero = FALSE) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x != floor(x) || x < (if (zero) 0 else 1) || x > .Machine$integer.max)
+    stop(paste(name, "must be a representable", if (zero) "nonnegative" else "positive", "integer."))
+  as.integer(x)
+}
+
+.extend_math_mapping <- function(x, y, mapping) {
+  if (x$status != "ok" || y$status != "ok" ||
+      !identical(x$structure_key, y$structure_key)) return(NULL)
+  for (k in seq_along(x$tokens)) {
+    if (x$kinds[k] != "variable") next
+    a <- x$tokens[k]; b <- y$tokens[k]
+    existing <- match(a, mapping$a)
+    if (!is.na(existing)) {
+      if (mapping$b[existing] != b) return(NULL)
+    } else {
+      if (b %in% mapping$b) return(NULL)
+      mapping <- rbind(mapping, data.frame(a = a, b = b, stringsAsFactors = FALSE))
+    }
+  }
+  mapping
+}
+
+.math_sequence_links <- function(doc, units, max_source_gap) {
+  n <- nrow(units)
+  if (n < 2L) return(logical())
+  vapply(seq_len(n - 1L), function(i) {
+    between <- doc$units$start_offset > units$end_offset[i] &
+      doc$units$end_offset < units$start_offset[i + 1L]
+    blocked <- any(doc$units$type[between] %in% c("heading", "code", "inline_r", "inline_code")) ||
+      any(doc$units$status[between] != "ok")
+    units$math_status[i] == "ok" && units$math_status[i + 1L] == "ok" &&
+      identical(units$section[i], units$section[i + 1L]) && !blocked &&
+      units$start_offset[i + 1L] - units$end_offset[i] - 1L <= max_source_gap
+  }, logical(1))
+}
+
+find_math_sequences <- function(doc_a, doc_b, min_steps = 2L, max_steps = 5L,
+    max_skips = 1L, max_source_gap = 2000L, max_pairs = 10000L,
+    max_states = 20000L, max_results = 1000L, max_token_work = 5000000L,
+    max_formulas = 500L) {
+  min_steps <- math_sequence_integer(min_steps, "min_steps")
+  max_steps <- math_sequence_integer(max_steps, "max_steps")
+  max_skips <- math_sequence_integer(max_skips, "max_skips", TRUE)
+  max_source_gap <- math_sequence_integer(max_source_gap, "max_source_gap", TRUE)
+  max_pairs <- math_sequence_integer(max_pairs, "max_pairs")
+  max_states <- math_sequence_integer(max_states, "max_states")
+  max_results <- math_sequence_integer(max_results, "max_results")
+  max_token_work <- math_sequence_integer(max_token_work, "max_token_work")
+  max_formulas <- math_sequence_integer(max_formulas, "max_formulas")
+  if (min_steps < 2L || min_steps > max_steps || max_steps > 20L)
+    stop("Require 2 <= min_steps <= max_steps <= 20.")
+  if (!inherits(doc_a, "rmd_document") || !inherits(doc_b, "rmd_document"))
+    stop("Both inputs must be rmd_document objects.")
+  na <- sum(doc_a$units$type == "math"); nb <- sum(doc_b$units$type == "math")
+  if (max(na, nb) > max_formulas) stop("Formula unit limit exceeded.")
+  if (as.double(na) * nb > max_pairs) stop("Formula pair limit exceeded.")
+  a <- prepare_math_steps(doc_a, max_steps = max_formulas)
+  b <- prepare_math_steps(doc_b, max_steps = max_formulas)
+  na <- nrow(a); nb <- nrow(b)
+  if (as.double(na) * nb > max_pairs) stop("Expanded formula pair limit exceeded.")
+  links_a <- .math_sequence_links(doc_a, a, max_source_gap)
+  links_b <- .math_sequence_links(doc_b, b, max_source_gap)
+  states <- 0; token_work <- 0; paths <- list()
+  attempt <- function(i, j, mapping) {
+    states <<- states + 1
+    token_work <<- token_work + max(a$token_count[i], b$token_count[j])
+    if (states > max_states) stop("Formula search state limit exceeded.")
+    if (token_work > max_token_work) stop("Formula token work limit exceeded.")
+    .extend_math_mapping(a$details[[i]], b$details[[j]], mapping)
+  }
+  walk <- function(ia, ib, mapping, skipped) {
+    i <- tail(ia, 1L); j <- tail(ib, 1L)
+    extended <- FALSE
+    if (length(ia) < max_steps && i < na && j < nb) {
+      remaining <- max_skips - skipped
+      for (di in seq_len(min(as.double(remaining) + 1, na - i))) {
+        if (!all(links_a[seq.int(i, i + di - 1L)])) next
+        for (dj in seq_len(min(as.double(remaining) - di + 2, nb - j))) {
+          if (!all(links_b[seq.int(j, j + dj - 1L)])) next
+          next_map <- attempt(i + di, j + dj, mapping)
+          if (is.null(next_map)) next
+          extended <- TRUE
+          walk(c(ia, i + di), c(ib, j + dj), next_map, skipped + di + dj - 2L)
+        }
+      }
+    }
+    if (!extended && length(ia) >= min_steps) {
+      if (length(paths) >= max_results) stop("Formula result limit exceeded.")
+      paths[[length(paths) + 1L]] <<- list(a = ia, b = ib, mapping = mapping,
+        skipped = skipped, keys = paste(ia, ib, sep = ":"))
+    }
+  }
+  empty_map <- data.frame(a = character(), b = character(), stringsAsFactors = FALSE)
+  for (i in seq_len(na)) for (j in seq_len(nb)) {
+    mapping <- attempt(i, j, empty_map)
+    if (!is.null(mapping)) walk(i, j, mapping, 0L)
+  }
+  # Remove contained paths, preserving distinct positional alignments.
+  keep <- vapply(seq_along(paths), function(i) {
+    !any(vapply(seq_along(paths), function(j) length(paths[[j]]$a) > length(paths[[i]]$a) &&
+      all(paths[[i]]$keys %in% paths[[j]]$keys), logical(1)))
+  }, logical(1))
+  paths <- paths[keep]
+  matches <- data.frame(file_id_a = character(), file_id_b = character(),
+    matched_steps = integer(), skipped_steps = integer(), step_similarity = numeric(),
+    token_count = integer(), raw_equal = logical(), normalized_equal = logical(),
+    start_line_a = integer(), end_line_a = integer(), start_line_b = integer(), end_line_b = integer(),
+    stringsAsFactors = FALSE)
+  for (name in c("step_pairs", "variable_map", "skipped_units_a", "skipped_units_b")) matches[[name]] <- I(list())
+  for (path in paths) {
+    ia <- path$a; ib <- path$b
+    pairs <- data.frame(unit_id_a = a$unit_id[ia], unit_id_b = b$unit_id[ib],
+      parent_unit_id_a = a$parent_unit_id[ia], parent_unit_id_b = b$parent_unit_id[ib],
+      step_index_a = a$step_index[ia], step_index_b = b$step_index[ib],
+      content_a = a$content[ia], content_b = b$content[ib],
+      start_line_a = a$start_line[ia], end_line_a = a$end_line[ia],
+      start_line_b = b$start_line[ib], end_line_b = b$end_line[ib], stringsAsFactors = FALSE)
+    pairs$token_positions_a <- I(lapply(a$details[ia], function(x) x$source_positions))
+    pairs$token_positions_b <- I(lapply(b$details[ib], function(x) x$source_positions))
+    raw <- all(vapply(seq_along(ia), function(k) identical(a$content[ia[k]], b$content[ib[k]]), logical(1)))
+    normalized <- all(vapply(seq_along(ia), function(k)
+      identical(a$details[[ia[k]]]$normalized_key, b$details[[ib[k]]]$normalized_key), logical(1)))
+    row <- data.frame(file_id_a = doc_a$file_id, file_id_b = doc_b$file_id,
+      matched_steps = length(ia), skipped_steps = path$skipped,
+      step_similarity = length(ia) / (length(ia) + path$skipped),
+      token_count = as.integer(sum(a$token_count[ia])), raw_equal = raw, normalized_equal = normalized,
+      start_line_a = a$start_line[ia[1L]], end_line_a = a$end_line[tail(ia, 1L)],
+      start_line_b = b$start_line[ib[1L]], end_line_b = b$end_line[tail(ib, 1L)], stringsAsFactors = FALSE)
+    row$step_pairs <- I(list(pairs)); row$variable_map <- I(list(path$mapping))
+    row$skipped_units_a <- I(list(a$unit_id[setdiff(seq.int(ia[1L], tail(ia, 1L)), ia)]))
+    row$skipped_units_b <- I(list(b$unit_id[setdiff(seq.int(ib[1L], tail(ib, 1L)), ib)]))
+    matches <- rbind(matches, row)
+  }
+  if (nrow(matches)) {
+    matches <- matches[order(-matches$matched_steps, matches$skipped_steps,
+      matches$start_line_a, matches$start_line_b), , drop = FALSE]
+    rownames(matches) <- NULL
+  }
+  limited <- any(c(a$math_status, b$math_status) == "limited") ||
+    any(c(doc_a$diagnostics$severity, doc_b$diagnostics$severity) %in% c("warning", "error"))
+  status <- if (limited) "limited" else if (!na || !nb) "not_applicable" else
+    if (min(sum(a$math_status == "ok"), sum(b$math_status == "ok")) < min_steps)
+      "insufficient_steps" else "ok"
+  list(status = status, matches = matches, formulas_a = a, formulas_b = b,
+    state_count = states, token_work = token_work,
+    parameters = list(min_steps = min_steps, max_steps = max_steps, max_skips = max_skips,
+      max_source_gap = max_source_gap, max_pairs = max_pairs, max_states = max_states,
+      max_results = max_results, max_token_work = max_token_work, max_formulas = max_formulas),
+    diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
+}
+# END R/math-sequences.R
+
+# BEGIN R/code.R
+# R parsing only: never source, eval, load packages, or invoke submitted calls.
+code_positive_integer <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x < 1 || x != floor(x) || x > .Machine$integer.max)
+    stop(paste(name, "must be a representable positive integer."))
+  as.integer(x)
+}
+.code_key <- function(x) paste0(nchar(x, type = "chars"), ":", x, collapse = "|")
+.empty_code_tokens <- function() data.frame(token_id = integer(), kind = character(),
+  text = character(), start_offset = integer(), end_offset = integer(),
+  start_line = integer(), start_column = integer(), end_line = integer(), end_column = integer(),
+  stringsAsFactors = FALSE)
+
+tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_nodes = 50000L, max_statements = 2000L) {
+  if (!is.character(code) || length(code) != 1L || is.na(code))
+    stop("code must be one non-missing character string.")
+  max_chars <- code_positive_integer(max_chars, "max_chars")
+  max_tokens <- code_positive_integer(max_tokens, "max_tokens")
+  max_nodes <- code_positive_integer(max_nodes, "max_nodes")
+  max_statements <- code_positive_integer(max_statements, "max_statements")
+  code <- gsub("\r\n?", "\n", enc2utf8(code), perl = TRUE)
+  chars <- strsplit(code, "", fixed = TRUE)[[1L]]; n <- length(chars)
+  if (n > max_chars) stop("Code character limit exceeded.")
+  result <- list(source = code, tokens = .empty_code_tokens(), token_count = 0L,
+    normalized_key = NA_character_, renamed_key = NA_character_,
+    variable_map = data.frame(name = character(), canonical = character()),
+    status = "limited", parse_status = "error", rename_status = "unavailable", issues = character(),
+    statements = list(), statement_status = "unavailable")
+  # Do not interpret submitted source-location directives or follow their filenames.
+  if (grepl("(?m)^[ \t]*#line[ \t]+", code, perl = TRUE)) {
+    result$parse_status <- "limited"; result$issues <- "unsupported_line_directive"; return(result)
+  }
+  parsed <- tryCatch(parse(text = code, keep.source = TRUE, encoding = "UTF-8"), error = identity)
+  if (inherits(parsed, "error")) {
+    result$issues <- paste0("parse_error: ", conditionMessage(parsed)); return(result)
+  }
+  pd <- utils::getParseData(parsed, includeText = FALSE)
+  result$parse_status <- "ok"
+  if (is.null(pd) || !nrow(pd)) {
+    result$status <- "empty"; result$rename_status <- "not_applicable"
+    result$statement_status <- "not_applicable"; return(result)
+  }
+  if (nrow(pd) > max_nodes) stop("Code parse node limit exceeded.")
+  terminal <- pd[pd$terminal, , drop = FALSE]
+  if (nrow(terminal) > max_tokens) stop("Code token limit exceeded.")
+  # includeText=FALSE avoids truncated text for long string literals.
+  literal <- tryCatch(unname(utils::getParseText(pd, terminal$id)), error = function(e) NULL)
+  cursor <- 1L; starts <- ends <- integer(nrow(terminal)); mapped <- !is.null(literal)
+  whitespace <- c(" ", "\t", "\n", "\r", "\f", "\v")
+  if (mapped) for (i in seq_len(nrow(terminal))) {
+    while (cursor <= n && chars[cursor] %in% whitespace) cursor <- cursor + 1L
+    if (is.na(literal[i]) || !nzchar(literal[i])) { mapped <- FALSE; break }
+    width <- nchar(literal[i], type = "chars")
+    finish <- cursor + width - 1L
+    actual <- if (width > 0L && finish <= n) paste0(chars[seq.int(cursor, finish)], collapse = "") else ""
+    if (!width || !identical(actual, literal[i])) { mapped <- FALSE; break }
+    starts[i] <- cursor; ends[i] <- finish; cursor <- finish + 1L
+  }
+  while (cursor <= n && chars[cursor] %in% whitespace) cursor <- cursor + 1L
+  if (!mapped || cursor <= n) {
+    result$parse_status <- "limited"; result$issues <- "token_source_mapping_failed"; return(result)
+  }
+  line_starts <- c(1L, which(chars == "\n") + 1L)
+  line_a <- findInterval(starts, line_starts); line_b <- findInterval(ends, line_starts)
+  tokens <- data.frame(token_id = terminal$id, kind = terminal$token, text = literal,
+    start_offset = starts, end_offset = ends, start_line = as.integer(line_a),
+    start_column = as.integer(starts - line_starts[line_a] + 1L), end_line = as.integer(line_b),
+    end_column = as.integer(ends - line_starts[line_b] + 1L), stringsAsFactors = FALSE)
+  result$tokens <- tokens
+  ignored <- terminal$token == "COMMENT" | literal == ";"
+  included <- pd[!pd$terminal | !pd$id %in% terminal$id[ignored], , drop = FALSE]
+  result$token_count <- as.integer(sum(!ignored))
+  if (!result$token_count) {
+    result$status <- "empty"; result$rename_status <- "not_applicable"
+    result$statement_status <- "not_applicable"; return(result)
+  }
+  node_parent <- match(included$parent, included$id, nomatch = 0L)
+  values <- rep("", nrow(included))
+  leaves <- included$terminal
+  values[leaves] <- literal[match(included$id[leaves], terminal$id)]
+  graph_key <- function(v) .code_key(paste(included$token, node_parent, v, sep = "\001"))
+  result$normalized_key <- graph_key(values)
+  # Keep grammatical parent relationships: newline-sensitive expression boundaries matter.
+  issues <- character()
+  scope_tokens <- c("FUNCTION", "FOR", "WHILE", "REPEAT", "IF", "ELSE")
+  if (any(terminal$token %in% scope_tokens) || any(literal %in% c("<<-", "->", "->>")) ||
+      any(terminal$token == "EQ_ASSIGN") || any(literal == "~"))
+    issues <- c(issues, "renaming_restricted_scope_or_assignment")
+  allowed_calls <- c("c", "mean", "sum", "sd", "var", "median", "min", "max", "length", "sqrt",
+    "abs", "log", "exp", "round", "seq", "rep", "sort", "order", "unique", "which", "is.na",
+    "as.numeric", "as.integer", "as.character", "numeric", "integer", "character", "matrix", "array",
+    "data.frame", "list", "print", "cat", "stop", "warning", "cor", "cov", "sample", "rnorm",
+    "runif", "set.seed", "head", "tail", "nrow", "ncol")
+  if (any(!literal[terminal$token == "SYMBOL_FUNCTION_CALL"] %in% allowed_calls))
+    issues <- c(issues, "renaming_restricted_call")
+  if (any(!literal[terminal$token == "SYMBOL_PACKAGE"] %in% c("base", "stats", "utils")))
+    issues <- c(issues, "renaming_restricted_namespace")
+  inside <- function(node) {
+    terminal[(terminal$line1 > node$line1 | (terminal$line1 == node$line1 & terminal$col1 >= node$col1)) &
+      (terminal$line2 < node$line2 | (terminal$line2 == node$line2 & terminal$col2 <= node$col2)), , drop = FALSE]
+  }
+  for (id in terminal$id[literal == "("]) {
+    open <- pd[match(id, pd$id), , drop = FALSE]
+    children <- pd[pd$parent == open$parent & pd$token != "COMMENT", , drop = FALSE]
+    before <- children[children$line2 < open$line1 | (children$line2 == open$line1 & children$col2 < open$col1), , drop = FALSE]
+    if (nrow(before) == 1L && before$token == "expr") {
+      head_terms <- inside(before)
+      if (!all(head_terms$token %in% c("SYMBOL_FUNCTION_CALL", "SYMBOL_PACKAGE", "NS_GET", "NS_GET_INT")) ||
+          sum(head_terms$token == "SYMBOL_FUNCTION_CALL") != 1L)
+        issues <- c(issues, "renaming_restricted_computed_call")
+    }
+  }
+  candidates <- character(); defining_ids <- integer(); defining_parents <- integer()
+  for (id in terminal$id[terminal$token == "LEFT_ASSIGN" & literal == "<-"]) {
+    operator <- pd[match(id, pd$id), , drop = FALSE]
+    children <- pd[pd$parent == operator$parent & pd$token != "COMMENT", , drop = FALSE]
+    left <- children[children$line2 < operator$line1 | (children$line2 == operator$line1 & children$col2 < operator$col1), , drop = FALSE]
+    if (nrow(left) != 1L || left$token != "expr") next
+    symbol <- pd[pd$parent == left$id & pd$token != "COMMENT", , drop = FALSE]
+    if (nrow(symbol) != 1L || symbol$token != "SYMBOL") next
+    name <- literal[match(symbol$id, terminal$id)]
+    if (!grepl("^[A-Za-z.][A-Za-z0-9._]*$", name) || name %in% candidates) next
+    candidates <- c(candidates, name); defining_ids <- c(defining_ids, symbol$id)
+    defining_parents <- c(defining_parents, operator$parent)
+  }
+  safe <- vapply(seq_along(candidates), function(i) {
+    name <- candidates[i]; definition <- match(defining_ids[i], terminal$id)
+    # A name used as a function is kept literally throughout the block.
+    if (name %in% literal[terminal$token == "SYMBOL_FUNCTION_CALL"]) return(FALSE)
+    uses <- which(terminal$token == "SYMBOL" & literal == name)
+    if (any(uses < definition)) return(FALSE)
+    assign <- pd[match(defining_parents[i], pd$id), , drop = FALSE]
+    refs <- inside(assign)
+    any_self_reference <- any(refs$id != defining_ids[i] & refs$token == "SYMBOL" &
+      literal[match(refs$id, terminal$id)] == name)
+    !any_self_reference
+  }, logical(1))
+  candidates <- candidates[safe]
+  # Member names are literal even if they happen to equal a local variable name.
+  member <- rep(FALSE, nrow(terminal))
+  syntax <- which(terminal$token != "COMMENT")
+  if (length(syntax) > 1L) member[syntax[-1L]] <- literal[head(syntax, -1L)] %in% c("$", "@")
+  eligible <- rep(FALSE, nrow(included))
+  if (!length(issues)) {
+    replaced <- values
+    eligible <- included$terminal & included$token == "SYMBOL"
+    indices <- match(included$id, terminal$id)
+    eligible[eligible] <- !member[indices[eligible]] & values[eligible] %in% candidates
+    if (any(eligible)) replaced[eligible] <- paste0("@variable:", match(values[eligible], candidates))
+    result$renamed_key <- graph_key(replaced)
+    result$variable_map <- data.frame(name = candidates, canonical = if (length(candidates)) paste0("v", seq_along(candidates)) else character(), stringsAsFactors = FALSE)
+    result$rename_status <- "ok"; result$status <- "ok"
+  } else {
+    result$rename_status <- "restricted"; result$status <- "limited"
+  }
+  result$issues <- unique(issues)
+  roots <- included[!included$terminal & included$parent == 0L, , drop = FALSE]
+  if (nrow(roots) > max_statements) stop("Code statement count limit exceeded.")
+  covered <- integer(nrow(terminal)); statements <- list()
+  for (i in seq_len(nrow(roots))) {
+    root <- roots[i, , drop = FALSE]
+    within <- function(rows) (rows$line1 > root$line1 | (rows$line1 == root$line1 & rows$col1 >= root$col1)) &
+      (rows$line2 < root$line2 | (rows$line2 == root$line2 & rows$col2 <= root$col2))
+    token_rows <- which(within(terminal) & !ignored)
+    if (!length(token_rows)) next
+    node_rows <- which(within(included))
+    nodes <- included[node_rows, , drop = FALSE]
+    parents <- match(nodes$parent, nodes$id, nomatch = 0L)
+    key <- function(v) .code_key(paste(nodes$token, parents, v, sep = "\001"))
+    shape <- values[node_rows]
+    shape[eligible[node_rows]] <- "@renameable"
+    covered[token_rows] <- covered[token_rows] + 1L
+    statements[[length(statements) + 1L]] <- list(token_rows = as.integer(token_rows),
+      content = substring(code, starts[token_rows[1L]], ends[tail(token_rows, 1L)]),
+      normalized_key = key(values[node_rows]),
+      shape_key = if (result$rename_status == "ok") key(shape) else NA_character_,
+      rename_eligible = eligible[match(terminal$id[token_rows], included$id)])
+  }
+  if (!length(statements) || any(covered[!ignored] != 1L)) {
+    result$status <- "limited"; result$statement_status <- "unavailable"
+    result$issues <- unique(c(result$issues, "statement_extraction_failed"))
+  } else {
+    result$statements <- statements; result$statement_status <- "ok"
+  }
+  result
+}
+
+prepare_code_units <- function(doc, max_units = 500L, max_total_chars = 1000000L) {
+  if (!inherits(doc, "rmd_document")) stop("doc must be an rmd_document.")
+  max_units <- code_positive_integer(max_units, "max_units")
+  max_total_chars <- code_positive_integer(max_total_chars, "max_total_chars")
+  units <- doc$units[doc$units$type %in% c("code", "inline_r"), , drop = FALSE]
+  if (nrow(units) > max_units) stop("Code unit limit exceeded.")
+  if (sum(nchar(units$content, type = "chars")) > max_total_chars) stop("Total code character limit exceeded.")
+  details <- lapply(seq_len(nrow(units)), function(i) {
+    if (tolower(units$language[i]) != "r") {
+      d <- list(source = units$content[i], tokens = .empty_code_tokens(), token_count = 0L,
+        normalized_key = NA_character_, renamed_key = NA_character_,
+        variable_map = data.frame(name = character(), canonical = character()), status = "limited",
+        parse_status = "unsupported", rename_status = "unavailable", issues = "unsupported_code_language")
+    } else d <- tokenize_r_code(units$content[i])
+    if (units$status[i] != "ok") {
+      d$status <- "limited"; d$parse_status <- "limited"; d$rename_status <- "unavailable"
+      d$normalized_key <- d$renamed_key <- NA_character_; d$issues <- c(d$issues, "parser_limited")
+    }
+    if (nrow(d$tokens)) {
+      d$tokens$start_offset <- as.integer(d$tokens$start_offset + units$content_start[i] - 1L)
+      d$tokens$end_offset <- as.integer(d$tokens$end_offset + units$content_start[i] - 1L)
+      source_chars <- strsplit(doc$source, "", fixed = TRUE)[[1L]]
+      starts <- c(1L, which(source_chars == "\n") + 1L)
+      d$tokens$start_line <- as.integer(findInterval(d$tokens$start_offset, starts))
+      d$tokens$end_line <- as.integer(findInterval(d$tokens$end_offset, starts))
+      d$tokens$start_column <- as.integer(d$tokens$start_offset - starts[d$tokens$start_line] + 1L)
+      d$tokens$end_column <- as.integer(d$tokens$end_offset - starts[d$tokens$end_line] + 1L)
+    }
+    d
+  })
+  units$code_status <- vapply(details, function(d) d$status, character(1))
+  units$token_count <- vapply(details, function(d) d$token_count, integer(1))
+  units$details <- I(details)
+  units
+}
+
+compare_code_pair <- function(doc_a, doc_b, max_pairs = 10000L, max_pair_chars = 5000000L) {
+  max_pairs <- code_positive_integer(max_pairs, "max_pairs")
+  max_pair_chars <- code_positive_integer(max_pair_chars, "max_pair_chars")
+  a <- prepare_code_units(doc_a); b <- prepare_code_units(doc_b)
+  na <- nrow(a); nb <- nrow(b)
+  if (as.double(na) * nb > max_pairs) stop("Code pair limit exceeded.")
+  if (sum(nchar(a$content)) * as.double(nb) + sum(nchar(b$content)) * as.double(na) > max_pair_chars)
+    stop("Code pair character work limit exceeded.")
+  matches <- data.frame(file_id_a = character(), file_id_b = character(), unit_id_a = character(),
+    unit_id_b = character(), raw_equal = logical(), tokens_equal = logical(), renamed_equal = logical(),
+    token_count = integer(), start_line_a = integer(), end_line_a = integer(),
+    start_line_b = integer(), end_line_b = integer(), status = character(), stringsAsFactors = FALSE)
+  matches$variable_map <- I(list())
+  comments <- data.frame(unit_id_a = character(), unit_id_b = character(), comment_count = integer(), stringsAsFactors = FALSE)
+  for (i in seq_len(na)) for (j in seq_len(nb)) {
+    x <- a$details[[i]]; y <- b$details[[j]]
+    cx <- x$tokens$text[x$tokens$kind == "COMMENT"]; cy <- y$tokens$text[y$tokens$kind == "COMMENT"]
+    if (length(cx) && identical(cx, cy)) comments <- rbind(comments,
+      data.frame(unit_id_a = a$unit_id[i], unit_id_b = b$unit_id[j], comment_count = length(cx)))
+    raw <- x$status != "empty" && y$status != "empty" && nzchar(trimws(a$content[i])) && identical(a$content[i], b$content[j])
+    lexical <- x$parse_status == "ok" && y$parse_status == "ok" && x$token_count > 0L && y$token_count > 0L &&
+      identical(x$normalized_key, y$normalized_key)
+    renamed <- x$rename_status == "ok" && y$rename_status == "ok" &&
+      identical(x$renamed_key, y$renamed_key)
+    if (!raw && !lexical && !renamed) next
+    row <- data.frame(file_id_a = a$file_id[i], file_id_b = b$file_id[j], unit_id_a = a$unit_id[i], unit_id_b = b$unit_id[j],
+      raw_equal = raw, tokens_equal = lexical, renamed_equal = renamed,
+      token_count = as.integer(min(x$token_count, y$token_count)), start_line_a = a$start_line[i], end_line_a = a$end_line[i],
+      start_line_b = b$start_line[j], end_line_b = b$end_line[j],
+      status = if (x$status == "ok" && y$status == "ok") "ok" else "limited", stringsAsFactors = FALSE)
+    row$variable_map <- I(list(if (renamed) data.frame(a = x$variable_map$name, b = y$variable_map$name)
+      else data.frame(a = character(), b = character())))
+    matches <- rbind(matches, row)
+  }
+  limited <- any(c(a$code_status, b$code_status) == "limited") ||
+    any(c(doc_a$diagnostics$severity, doc_b$diagnostics$severity) %in% c("warning", "error"))
+  status <- if (limited) "limited" else if (!na || !nb) "not_applicable" else
+    if (any(c(a$code_status, b$code_status) == "empty")) "insufficient_content" else "ok"
+  list(status = status, matches = matches, comment_matches = comments, code_a = a, code_b = b,
+    parameters = list(max_pairs = max_pairs, max_pair_chars = max_pair_chars),
+    diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
+}
+# END R/code.R
+
+# BEGIN R/code-local.R
+# Requires parser.R and code.R; all submitted code remains unevaluated.
+.code_nonnegative_integer <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x < 0 || x != floor(x) || x > .Machine$integer.max)
+    stop(paste(name, "must be a representable nonnegative integer."))
+  as.integer(x)
+}
+
+.code_statements_from_units <- function(units, max_statements) {
+  result <- data.frame(file_id = character(), unit_id = character(), statement_id = character(),
+    statement_index = integer(), content = character(), token_count = integer(),
+    normalized_key = character(), shape_key = character(), unit_status = character(),
+    start_line = integer(), end_line = integer(), stringsAsFactors = FALSE)
+  result$tokens <- I(list()); result$rename_eligible <- I(list())
+  for (i in seq_len(nrow(units))) {
+    d <- units$details[[i]]
+    if (d$parse_status != "ok" || !identical(d$statement_status, "ok")) next
+    if (nrow(result) + length(d$statements) > max_statements) stop("Total code statement limit exceeded.")
+    for (j in seq_along(d$statements)) {
+      s <- d$statements[[j]]; tokens <- d$tokens[s$token_rows, , drop = FALSE]
+      row <- data.frame(file_id = units$file_id[i], unit_id = units$unit_id[i],
+        statement_id = paste0(units$unit_id[i], ":e", sprintf("%04d", j)), statement_index = as.integer(j),
+        content = s$content, token_count = as.integer(nrow(tokens)), normalized_key = s$normalized_key,
+        shape_key = s$shape_key, unit_status = d$status, start_line = tokens$start_line[1L],
+        end_line = tail(tokens$end_line, 1L), stringsAsFactors = FALSE)
+      row$tokens <- I(list(tokens)); row$rename_eligible <- I(list(s$rename_eligible))
+      result <- rbind(result, row)
+    }
+  }
+  rownames(result) <- NULL
+  result
+}
+
+prepare_code_statements <- function(doc, max_statements = 2000L) {
+  max_statements <- code_positive_integer(max_statements, "max_statements")
+  .code_statements_from_units(prepare_code_units(doc), max_statements)
+}
+
+make_code_windows <- function(statements, window_tokens = 100L, window_statements = 20L, max_windows = 500L) {
+  window_tokens <- code_positive_integer(window_tokens, "window_tokens")
+  window_statements <- code_positive_integer(window_statements, "window_statements")
+  max_windows <- code_positive_integer(max_windows, "max_windows")
+  if (window_statements > 20L) stop("window_statements must not exceed 20.")
+  if (!is.data.frame(statements) || !all(c("unit_id", "statement_id", "token_count") %in% names(statements)))
+    stop("statements must come from prepare_code_statements.")
+  result <- data.frame(window_id = character(), unit_id = character(), token_count = integer(), oversize = logical())
+  result$statement_indices <- I(list())
+  for (unit in unique(statements$unit_id)) {
+    indices <- which(statements$unit_id == unit); start <- 1L; n <- length(indices)
+    while (start <= n) {
+      end <- start; total <- statements$token_count[indices[start]]
+      while (end < n && end - start + 1L < window_statements &&
+          total + statements$token_count[indices[end + 1L]] <= window_tokens) {
+        end <- end + 1L; total <- total + statements$token_count[indices[end]]
+      }
+      if (nrow(result) >= max_windows) stop("Code window limit exceeded.")
+      row <- data.frame(window_id = paste0("w", sprintf("%05d", nrow(result) + 1L)),
+        unit_id = unit, token_count = as.integer(total), oversize = total > window_tokens)
+      row$statement_indices <- I(list(indices[seq.int(start, end)]))
+      result <- rbind(result, row)
+      if (end == n) break
+      start <- start + max(1L, as.integer(floor((end - start + 1L) / 2)))
+    }
+  }
+  result
+}
+
+.code_window_features <- function(statements, windows) {
+  rows <- list()
+  for (i in seq_len(nrow(windows))) for (mode in c("lexical", "renamed")) {
+    indices <- windows$statement_indices[[i]]
+    keys <- statements[[if (mode == "lexical") "normalized_key" else "shape_key"]][indices]
+    keys <- unique(keys[!is.na(keys)])
+    if (length(keys)) rows[[length(rows) + 1L]] <- data.frame(window_index = i, mode = mode, key = keys)
+  }
+  if (!length(rows)) return(data.frame(window_index = integer(), mode = character(), key = character()))
+  do.call(rbind, rows)
+}
+
+select_code_candidates <- function(statements_a, statements_b, windows_a, windows_b,
+    max_candidates = 500L, max_seed_pairs = 100000L) {
+  max_candidates <- code_positive_integer(max_candidates, "max_candidates")
+  max_seed_pairs <- code_positive_integer(max_seed_pairs, "max_seed_pairs")
+  a <- .code_window_features(statements_a, windows_a); b <- .code_window_features(statements_b, windows_b)
+  empty <- data.frame(window_index_a = integer(), window_index_b = integer(), mode = character())
+  if (!nrow(a) || !nrow(b)) return(empty)
+  ca <- table(paste(a$mode, a$key, sep = "\002")); cb <- table(paste(b$mode, b$key, sep = "\002"))
+  common <- intersect(names(ca), names(cb))
+  projected <- sum(as.double(ca[common]) * as.double(cb[common]))
+  if (projected > max_seed_pairs) stop("Code seed-pair limit exceeded.")
+  joined <- merge(a, b, by = c("mode", "key"), suffixes = c("_a", "_b"), sort = FALSE)
+  if (!nrow(joined)) return(empty)
+  result <- unique(joined[, names(empty), drop = FALSE])
+  if (nrow(result) > max_candidates) stop("Code candidate limit exceeded.")
+  result <- result[order(result$window_index_a, result$window_index_b, result$mode), , drop = FALSE]
+  rownames(result) <- NULL
+  result
+}
+
+.extend_code_mapping <- function(a, b, mode, mapping) {
+  if (mode == "lexical") return(if (identical(a$normalized_key, b$normalized_key)) mapping else NULL)
+  if (is.na(a$shape_key) || is.na(b$shape_key) || !identical(a$shape_key, b$shape_key)) return(NULL)
+  ta <- a$tokens[[1L]]; tb <- b$tokens[[1L]]
+  eligible <- a$rename_eligible[[1L]]
+  for (k in which(eligible)) {
+    x <- ta$text[k]; y <- tb$text[k]; existing <- match(x, mapping$a)
+    if (!is.na(existing)) {
+      if (mapping$b[existing] != y) return(NULL)
+    } else {
+      if (y %in% mapping$b) return(NULL)
+      mapping <- rbind(mapping, data.frame(a = x, b = y, stringsAsFactors = FALSE))
+    }
+  }
+  mapping
+}
+
+.code_local_matches <- function(a, b, wa, wb, candidates, min_tokens, min_statements,
+    max_skips, max_states, max_results, max_token_work) {
+  states <- 0; work <- 0; paths <- list(); seen <- new.env(parent = emptyenv())
+  empty_map <- data.frame(a = character(), b = character(), stringsAsFactors = FALSE)
+  for (ci in seq_len(nrow(candidates))) {
+    ia <- wa$statement_indices[[candidates$window_index_a[ci]]]
+    ib <- wb$statement_indices[[candidates$window_index_b[ci]]]
+    mode <- candidates$mode[ci]
+    attempt <- function(i, j, mapping) {
+      states <<- states + 1; work <<- work + max(a$token_count[ia[i]], b$token_count[ib[j]])
+      if (states > max_states) stop("Code local search state limit exceeded.")
+      if (work > max_token_work) stop("Code local token work limit exceeded.")
+      .extend_code_mapping(a[ia[i], , drop = FALSE], b[ib[j], , drop = FALSE], mode, mapping)
+    }
+    walk <- function(pa, pb, mapping, skipped) {
+      i <- tail(pa, 1L); j <- tail(pb, 1L); extended <- FALSE
+      if (i < length(ia) && j < length(ib)) {
+        remaining <- max_skips - skipped
+        for (di in seq_len(min(as.double(remaining) + 1, length(ia) - i)))
+          for (dj in seq_len(min(as.double(remaining) - di + 2, length(ib) - j))) {
+            next_map <- attempt(i + di, j + dj, mapping)
+            if (is.null(next_map)) next
+            extended <- TRUE
+            walk(c(pa, i + di), c(pb, j + dj), next_map, skipped + di + dj - 2L)
+          }
+      }
+      aa <- ia[pa]; bb <- ib[pb]
+      count <- sum(a$token_count[aa])
+      if (extended || length(aa) < min_statements || count < min_tokens) return(invisible(NULL))
+      if (mode == "renamed" && all(a$normalized_key[aa] == b$normalized_key[bb])) return(invisible(NULL))
+      keys <- paste(a$statement_id[aa], b$statement_id[bb], sep = "=")
+      key <- paste(mode, paste(keys, collapse = "/"), sep = ":")
+      if (exists(key, envir = seen, inherits = FALSE)) return(invisible(NULL))
+      if (length(paths) >= max_results) stop("Code local result limit exceeded.")
+      assign(key, TRUE, envir = seen)
+      paths[[length(paths) + 1L]] <<- list(a = aa, b = bb, mapping = mapping, mode = mode, keys = keys)
+    }
+    for (i in seq_along(ia)) for (j in seq_along(ib)) {
+      mapping <- attempt(i, j, empty_map)
+      if (!is.null(mapping)) walk(i, j, mapping, 0L)
+    }
+  }
+  keep <- vapply(seq_along(paths), function(i) !any(vapply(seq_along(paths), function(j)
+    paths[[i]]$mode == paths[[j]]$mode && length(paths[[j]]$a) > length(paths[[i]]$a) &&
+      all(paths[[i]]$keys %in% paths[[j]]$keys), logical(1))), logical(1))
+  paths <- paths[keep]
+  matches <- data.frame(file_id_a = character(), file_id_b = character(), unit_id_a = character(), unit_id_b = character(),
+    method = character(), matched_statements = integer(), matched_tokens = integer(), skipped_statements = integer(),
+    skipped_tokens = integer(), alignment_ratio = numeric(), start_line_a = integer(), end_line_a = integer(),
+    start_line_b = integer(), end_line_b = integer(), stringsAsFactors = FALSE)
+  list_cols <- c("statement_pairs", "variable_map", "token_starts_a", "token_ends_a", "token_starts_b", "token_ends_b",
+    "skipped_statements_a", "skipped_statements_b")
+  for (name in list_cols) matches[[name]] <- I(list())
+  for (path in paths) {
+    aa <- path$a; bb <- path$b
+    skipped_a <- setdiff(seq.int(aa[1L], tail(aa, 1L)), aa)
+    skipped_b <- setdiff(seq.int(bb[1L], tail(bb, 1L)), bb)
+    skipped_tokens <- sum(a$token_count[skipped_a]) + sum(b$token_count[skipped_b])
+    total <- sum(a$token_count[aa])
+    row <- data.frame(file_id_a = a$file_id[aa[1L]], file_id_b = b$file_id[bb[1L]],
+      unit_id_a = a$unit_id[aa[1L]], unit_id_b = b$unit_id[bb[1L]], method = path$mode,
+      matched_statements = as.integer(length(aa)), matched_tokens = as.integer(total),
+      skipped_statements = as.integer(length(skipped_a) + length(skipped_b)), skipped_tokens = as.integer(skipped_tokens),
+      alignment_ratio = total / (total + skipped_tokens), start_line_a = a$start_line[aa[1L]],
+      end_line_a = a$end_line[tail(aa, 1L)], start_line_b = b$start_line[bb[1L]], end_line_b = b$end_line[tail(bb, 1L)])
+    row$statement_pairs <- I(list(data.frame(statement_id_a = a$statement_id[aa], statement_id_b = b$statement_id[bb],
+      content_a = a$content[aa], content_b = b$content[bb], start_line_a = a$start_line[aa], end_line_a = a$end_line[aa],
+      start_line_b = b$start_line[bb], end_line_b = b$end_line[bb], stringsAsFactors = FALSE)))
+    row$variable_map <- I(list(path$mapping))
+    for (side in c("a", "b")) for (edge in c("start", "end")) {
+      table <- if (side == "a") a else b; indices <- if (side == "a") aa else bb
+      positions <- as.integer(unlist(lapply(table$tokens[indices], function(t) t[[paste0(edge, "_offset")]]), use.names = FALSE))
+      row[[paste0("token_", edge, "s_", side)]] <- I(list(positions))
+    }
+    row$skipped_statements_a <- I(list(a$statement_id[skipped_a]))
+    row$skipped_statements_b <- I(list(b$statement_id[skipped_b]))
+    matches <- rbind(matches, row[, names(matches), drop = FALSE])
+  }
+  if (nrow(matches)) {
+    matches <- matches[order(-matches$matched_tokens, matches$skipped_tokens, matches$start_line_a, matches$start_line_b, matches$method), , drop = FALSE]
+    rownames(matches) <- NULL
+  }
+  list(matches = matches, state_count = states, token_work = work)
+}
+
+.code_local_coverage <- function(doc, units, matches, side, lexical_only) {
+  comparable <- as.integer(unlist(lapply(units$details, function(d) {
+    if (d$parse_status != "ok") return(integer())
+    d$tokens$start_offset[d$tokens$kind != "COMMENT" & d$tokens$text != ";"]
+  }), use.names = FALSE))
+  comparable <- unique(comparable)
+  rows <- if (lexical_only) matches$method == "lexical" else rep(TRUE, nrow(matches))
+  matched <- unique(as.integer(unlist(matches[[paste0("token_starts_", side)]][rows], use.names = FALSE)))
+  if (!all(matched %in% comparable)) stop("Code coverage contains unknown token positions.")
+  data.frame(side = toupper(side), file_id = doc$file_id, comparable_tokens = length(comparable),
+    matched_tokens = length(matched), coverage = if (length(comparable)) length(matched) / length(comparable) else NA_real_,
+    status = if (length(comparable)) "ok" else "insufficient_tokens", stringsAsFactors = FALSE)
+}
+
+analyze_code_pair_local <- function(doc_a, doc_b, window_tokens = 100L, window_statements = 20L,
+    min_tokens = 20L, min_statements = 1L, max_skips = 1L, max_statements = 2000L,
+    max_windows = 500L, max_candidates = 500L, max_seed_pairs = 100000L,
+    max_states = 50000L, max_results = 1000L, max_token_work = 5000000L) {
+  config <- list(window_tokens = window_tokens, window_statements = window_statements, min_tokens = min_tokens,
+    min_statements = min_statements, max_statements = max_statements, max_windows = max_windows,
+    max_candidates = max_candidates, max_seed_pairs = max_seed_pairs, max_states = max_states,
+    max_results = max_results, max_token_work = max_token_work)
+  config <- Map(code_positive_integer, config, names(config))
+  max_skips <- .code_nonnegative_integer(max_skips, "max_skips"); config$max_skips <- max_skips
+  if (config$window_statements > 20L || config$min_statements > config$window_statements)
+    stop("Require min_statements <= window_statements <= 20.")
+  ua <- prepare_code_units(doc_a); ub <- prepare_code_units(doc_b)
+  a <- .code_statements_from_units(ua, config$max_statements)
+  b <- .code_statements_from_units(ub, config$max_statements)
+  wa <- make_code_windows(a, config$window_tokens, config$window_statements, config$max_windows)
+  wb <- make_code_windows(b, config$window_tokens, config$window_statements, config$max_windows)
+  candidates <- select_code_candidates(a, b, wa, wb, config$max_candidates, config$max_seed_pairs)
+  local <- .code_local_matches(a, b, wa, wb, candidates, config$min_tokens, config$min_statements,
+    config$max_skips, config$max_states, config$max_results, config$max_token_work)
+  coverage <- rbind(.code_local_coverage(doc_a, ua, local$matches, "a", FALSE), .code_local_coverage(doc_b, ub, local$matches, "b", FALSE))
+  lexical <- rbind(.code_local_coverage(doc_a, ua, local$matches, "a", TRUE), .code_local_coverage(doc_b, ub, local$matches, "b", TRUE))
+  limited <- any(c(ua$code_status, ub$code_status) == "limited") ||
+    any(c(doc_a$diagnostics$severity, doc_b$diagnostics$severity) %in% c("warning", "error"))
+  status <- if (limited) "limited" else if (!nrow(ua) || !nrow(ub)) "not_applicable" else
+    if (!nrow(a) || !nrow(b)) "insufficient_content" else "ok"
+  list(status = status, matches = local$matches, coverage = coverage, lexical_coverage = lexical,
+    code_a = ua, code_b = ub, statements_a = a, statements_b = b, windows_a = wa, windows_b = wb,
+    candidates = candidates, state_count = local$state_count, token_work = local$token_work, parameters = config,
+    diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
+}
+# END R/code-local.R
+
+# BEGIN R/report.R
+# Evidence report integration. Submitted Rmd files are read only by read_rmd().
+report_escape <- function(x) {
+  x <- enc2utf8(as.character(x)); x[is.na(x)] <- "不适用"
+  for (pair in list(c("&", "&amp;"), c("<", "&lt;"), c(">", "&gt;"),
+      c("\"", "&quot;"), c("'", "&#39;"), c("`", "&#96;")))
+    x <- gsub(pair[1L], pair[2L], x, fixed = TRUE)
+  x
+}
+
+.report_module <- function(fun) {
+  warnings <- character()
+  value <- tryCatch(withCallingHandlers(fun(), warning = function(w) {
+    warnings <<- c(warnings, conditionMessage(w)); invokeRestart("muffleWarning")
+  }), error = identity)
+  if (inherits(value, "error")) return(list(status = "error", error = conditionMessage(value), warnings = warnings, value = NULL))
+  list(status = if (length(warnings) && value$status == "ok") "limited" else value$status,
+    error = "", warnings = unique(warnings), value = value)
+}
+
+analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_options = list(), code_options = list()) {
+  for (options in list(text_options, formula_options, code_options)) {
+    if (!is.list(options) || (length(options) && (is.null(names(options)) || any(!nzchar(names(options))) || anyDuplicated(names(options)))))
+      stop("Module options must be named lists with unique names.")
+  }
+  if (any(c("doc_a", "doc_b") %in% c(names(text_options), names(formula_options), names(code_options))))
+    stop("Input documents cannot be overridden through module options.")
+  inputs <- list(A = input_a, B = input_b)
+  docs <- lapply(names(inputs), function(id) tryCatch(read_rmd(inputs[[id]], file_id = id), error = identity))
+  names(docs) <- names(inputs)
+  manifest <- do.call(rbind, lapply(names(inputs), function(id) {
+    d <- docs[[id]]; ok <- inherits(d, "rmd_document"); path <- inputs[[id]]
+    data.frame(file_id = id, filename = if (is.character(path) && length(path) == 1L && !is.na(path)) basename(path) else "无效路径",
+      read_status = if (ok) "ok" else "error", characters = if (ok) d$summary$characters else NA_integer_,
+      units = if (ok) nrow(d$units) else NA_integer_, diagnostics = if (ok) nrow(d$diagnostics) else NA_integer_,
+      message = if (ok) "" else conditionMessage(d), stringsAsFactors = FALSE)
+  }))
+  skip <- function() list(status = "not_run", error = "两份输入均成功读取后才运行分析。", warnings = character(), value = NULL)
+  modules <- setNames(lapply(seq_len(5L), function(i) skip()), c("text", "formula_single", "formula_sequence", "code_whole", "code_local"))
+  if (all(manifest$read_status == "ok")) {
+    args <- list(doc_a = docs$A, doc_b = docs$B)
+    modules$text <- .report_module(function() do.call(analyze_text_pair_approx, c(args, text_options)))
+    modules$formula_single <- .report_module(function() do.call(compare_math_pair, args))
+    modules$formula_sequence <- .report_module(function() do.call(find_math_sequences, c(args, formula_options)))
+    modules$code_whole <- .report_module(function() do.call(compare_code_pair, args))
+    modules$code_local <- .report_module(function() do.call(analyze_code_pair_local, c(args, code_options)))
+  }
+  statuses <- vapply(modules, function(m) m$status, character(1))
+  overall <- if (any(manifest$read_status == "error")) "input_error" else if (any(statuses == "error")) "partial_failure" else
+    if (any(statuses == "limited")) "limited" else "completed"
+  list(engine_version = "0.6.0-dev", verdict = "not_enabled", overall_status = overall,
+    manifest = manifest, documents = docs, modules = modules,
+    requested_options = list(text = text_options, formula_sequence = formula_options, code_local = code_options),
+    r_version = as.character(getRversion()))
+}
+
+.report_table <- function(df) {
+  if (!is.data.frame(df) || !nrow(df)) return("<p class='muted'>没有对应条目。</p>")
+  rows <- vapply(seq_len(nrow(df)), function(i) paste0("<tr>", paste0("<td>", report_escape(vapply(df, function(col)
+    if (is.na(col[i])) "不适用" else as.character(col[i]), character(1))), "</td>", collapse = ""), "</tr>"), character(1))
+  paste0("<div class='table-wrap'><table><thead><tr>", paste0("<th>", report_escape(names(df)), "</th>", collapse = ""),
+    "</tr></thead><tbody>", paste0(rows, collapse = ""), "</tbody></table></div>")
+}
+.report_pre <- function(text, max_chars = 4000L) {
+  text <- paste0(text, collapse = "\n")
+  clipped <- nchar(text, type = "chars") > max_chars
+  paste0("<pre><code>", report_escape(substr(text, 1L, max_chars)), "</code></pre>",
+    if (clipped) "<p class='muted'>展示已截断至4000字符；分析仍使用完整片段。</p>" else "")
+}
+.report_pair <- function(a, b, label_a = "A", label_b = "B") paste0("<div class='evidence-pair'><div><h4>",
+  report_escape(label_a), "</h4>", .report_pre(a), "</div><div><h4>", report_escape(label_b), "</h4>", .report_pre(b), "</div></div>")
+.report_source <- function(doc, positions) {
+  positions <- positions[!is.na(positions)]
+  if (!length(positions)) "" else substring(doc$source, min(positions), max(positions))
+}
+.report_params <- function(x, prefix = "") {
+  if (!length(x)) return(data.frame(parameter = character(), value = character()))
+  rows <- lapply(names(x), function(name) {
+    key <- if (nzchar(prefix)) paste(prefix, name, sep = ".") else name
+    if (is.list(x[[name]])) .report_params(x[[name]], key) else
+      data.frame(parameter = key, value = paste(as.character(x[[name]]), collapse = ", "), stringsAsFactors = FALSE)
+  })
+  do.call(rbind, rows)
+}
+
+detector_report_html <- function(result, max_evidence = 10L) {
+  max_evidence <- code_positive_integer(max_evidence, "max_evidence")
+  if (max_evidence > 100L) stop("max_evidence must not exceed 100.")
+  if (!is.list(result) || !identical(result$verdict, "not_enabled")) stop("Expected an analyze_rmd_pair result.")
+  out <- character(); add <- function(...) out <<- c(out, paste0(...))
+  section <- function(title) add("<h2>", report_escape(title), "</h2>")
+  note <- function(text) add("<p>", report_escape(text), "</p>")
+  module <- function(name) {
+    m <- result$modules[[name]]
+    note(paste("分析状态：", m$status))
+    if (nzchar(m$error)) add("<div class='notice error'>", .report_pre(m$error), "</div>")
+    if (length(m$warnings)) add(.report_pre(paste(m$warnings, collapse = "\n")))
+    m$value
+  }
+  evidence_rows <- function(df, title, fun) {
+    add("<h3>", report_escape(title), "</h3>")
+    if (!nrow(df)) { note("没有达到当前规则的对应条目；这不是无抄袭结论。"); return(invisible(NULL)) }
+    n <- min(nrow(df), max_evidence)
+    note(paste0("共 ", nrow(df), " 条，展示前 ", n, " 条；可重叠，不作为独立证据累计。"))
+    for (i in seq_len(n)) {
+      add("<article class='evidence'><h4>", report_escape(paste(title, i)), "</h4>")
+      fun(df[i, , drop = FALSE]); add("</article>")
+    }
+  }
+  line_pair <- function(row, a, b) .report_pair(a, b,
+    paste0("A：第", row$start_line_a, "—", row$end_line_a, "行"),
+    paste0("B：第", row$start_line_b, "—", row$end_line_b, "行"))
+  add("<div class='detector-report'>")
+  add("<div class='notice'><strong>未启用最终判定</strong><p>本报告提供相似片段及定位，不能证明抄袭、复制方向或数学/程序语义等价。参数尚未标定，不输出抄袭概率，也不平均三类指标。</p></div>")
+  note(paste("运行状态：", result$overall_status, "；引擎：", result$engine_version, "；R：", result$r_version))
+  section("输入与分析概况"); add(.report_table(result$manifest))
+  labels <- c(text = "文字", formula_single = "完整公式", formula_sequence = "公式步骤", code_whole = "完整代码", code_local = "局部代码")
+  statuses <- data.frame(module = unname(labels), status = vapply(result$modules, function(m) m$status, character(1)), stringsAsFactors = FALSE)
+  add(.report_table(statuses))
+  note("error 表示模块未完成，不能按零相似度处理；limited 表示只分析了支持的范围。not_applicable、insufficient等状态需结合原文核查。")
+  if (any(result$manifest$read_status != "ok")) {
+    note("输入读取失败，本次未运行分项比较。请检查路径、Rmd扩展名及UTF-8编码后重新运行。")
+    add("</div>"); return(paste(out, collapse = "\n"))
+  }
+  da <- result$documents$A; db <- result$documents$B
+  section("文字：字符覆盖与片段"); text <- module("text")
+  if (!is.null(text)) {
+    note(paste("字符片段 Jaccard：", if (is.na(text$jaccard$similarity)) "信息不足" else format(text$jaccard$similarity, digits = 5)))
+    note("以下覆盖按实际相同源字符的并集计算；替换字符、插删空位和忽略的排版标记不计覆盖。行号区间不等于整段均匹配。")
+    add(.report_table(text$coverage))
+    evidence_rows(text$exact_matches, "精确文字片段", function(row) {
+      add(.report_table(row[, c("matched_chars", "start_line_a", "end_line_a", "start_line_b", "end_line_b"), drop = FALSE]))
+      add(line_pair(row, .report_source(da, row$source_positions_a[[1L]]), .report_source(db, row$source_positions_b[[1L]])))
+    })
+    evidence_rows(text$approximate_matches, "近似文字片段", function(row) {
+      add(.report_table(row[, c("equal_chars", "alignment_columns", "similarity"), drop = FALSE]))
+      add(line_pair(row, .report_source(da, row$aligned_positions_a[[1L]]), .report_source(db, row$aligned_positions_b[[1L]])))
+    })
+    note("精确和近似表可能展示同一处内容；上述覆盖已经去重。近似算法受种子、窗口及每窗口一个最佳对齐限制。")
+  }
+  section("公式：完整表达与多步对应"); single <- module("formula_single")
+  if (!is.null(single)) evidence_rows(single$matches, "完整公式对应", function(row) {
+    add(.report_table(row[, c("raw_equal", "normalized_equal", "renamed_equal", "token_count", "status"), drop = FALSE]))
+    a <- single$formulas_a$content[match(row$unit_id_a, single$formulas_a$unit_id)]
+    b <- single$formulas_b$content[match(row$unit_id_b, single$formulas_b$unit_id)]
+    add(line_pair(row, a, b)); add(.report_table(row$variable_map[[1L]]))
+  })
+  sequence <- module("formula_sequence")
+  if (!is.null(sequence)) evidence_rows(sequence$matches, "推导步骤对应", function(row) {
+    add(.report_table(row[, c("matched_steps", "skipped_steps", "step_similarity", "token_count"), drop = FALSE]))
+    add(.report_table(row$variable_map[[1L]]))
+    pairs <- row$step_pairs[[1L]]
+    for (j in seq_len(nrow(pairs))) add(line_pair(pairs[j, , drop = FALSE], pairs$content_a[j], pairs$content_b[j]))
+    for (side in c("a", "b")) {
+      ids <- row[[paste0("skipped_units_", side)]][[1L]]
+      if (length(ids)) { table <- sequence[[paste0("formulas_", side)]]
+        note(paste(toupper(side), "跳过且未计匹配的步骤：")); add(.report_pre(table$content[match(ids, table$unit_id)])) }
+    }
+  })
+  note("公式以转义后的LaTeX源码展示，不加载在线排版资源。短标准公式不单独构成抄袭结论；未计算公式覆盖率。完整公式接口与步骤接口的支持范围不同。")
+  section("代码：词法与一致改名"); whole <- module("code_whole")
+  if (!is.null(whole)) {
+    evidence_rows(whole$matches, "完整代码单元对应", function(row) {
+      add(.report_table(row[, c("raw_equal", "tokens_equal", "renamed_equal", "token_count", "status"), drop = FALSE]))
+      add(line_pair(row, whole$code_a$content[match(row$unit_id_a, whole$code_a$unit_id)], whole$code_b$content[match(row$unit_id_b, whole$code_b$unit_id)]))
+      add(.report_table(row$variable_map[[1L]]))
+    })
+    add("<h3>注释补充对应</h3>", .report_table(utils::head(whole$comment_matches, max_evidence)))
+    note(paste("注释补充共", nrow(whole$comment_matches), "条；仅显示前", max_evidence, "条，不作为独立主要证据。"))
+  }
+  local <- module("code_local")
+  if (!is.null(local)) {
+    add("<h3>原词法 token 覆盖</h3>", .report_table(local$lexical_coverage))
+    add("<h3>包含一致改名的对应 token 覆盖</h3>", .report_table(local$coverage))
+    note("第二种覆盖允许变量字符不同，统计结构对应token；不是文字相同字符覆盖，不能与字符数或公式步骤数相加。")
+    evidence_rows(local$matches, "局部代码对应", function(row) {
+      add(.report_table(row[, c("method", "matched_statements", "matched_tokens", "skipped_statements", "skipped_tokens", "alignment_ratio"), drop = FALSE]))
+      add(.report_table(row$variable_map[[1L]])); pairs <- row$statement_pairs[[1L]]
+      for (j in seq_len(nrow(pairs))) add(line_pair(pairs[j, , drop = FALSE], pairs$content_a[j], pairs$content_b[j]))
+      for (side in c("a", "b")) {
+        ids <- row[[paste0("skipped_statements_", side)]][[1L]]
+        if (length(ids)) { table <- local[[paste0("statements_", side)]]
+          note(paste(toupper(side), "跳过且未计覆盖的语句：")); add(.report_pre(table$content[match(ids, table$statement_id)])) }
+      }
+    })
+    note("只按顶层完整语句匹配，不进入函数/循环内部查找局部片段。完整单元与局部表可能重叠；覆盖按源token位置去重。")
+  }
+  section("解析诊断与未覆盖内容")
+  for (id in c("A", "B")) { add("<h3>", id, " 的解析诊断</h3>", .report_table(utils::head(result$documents[[id]]$diagnostics, 100L))) }
+  for (name in c("formula_single", "formula_sequence", "code_whole", "code_local")) {
+    value <- result$modules[[name]]$value
+    if (is.null(value)) next
+    for (side in c("a", "b")) {
+      units <- value[[paste0(if (startsWith(name, "formula")) "formulas_" else "code_", side)]]
+      rows <- lapply(seq_len(nrow(units)), function(i) {
+        issues <- units$details[[i]]$issues
+        if (!length(issues)) return(NULL)
+        data.frame(side = toupper(side), unit_id = units$unit_id[i], line = units$start_line[i], issue = paste(issues, collapse = "; "))
+      })
+      rows <- Filter(Negate(is.null), rows)
+      if (length(rows)) { note(paste(labels[[name]], toupper(side), "的受限诊断共", length(rows), "条：")); add(.report_table(utils::head(do.call(rbind, rows), 100L))) }
+    }
+  }
+  note("诊断表最多展示100条。图片内容、外部资源、复杂语法和未成功解析区域不视为已分析；共同题干和标准解法尚未排除。")
+  section("本次参数与方法边界")
+  add(.report_table(.report_params(result$requested_options)))
+  for (name in names(result$modules)) {
+    value <- result$modules[[name]]$value
+    if (is.null(value)) next
+    parameters <- value$parameters
+    if (is.null(parameters) && name == "formula_single") parameters <- list(max_pairs = value$max_pairs)
+    if (length(parameters)) { add("<h3>", report_escape(labels[[name]]), "</h3>", .report_table(.report_params(parameters))) }
+  }
+  note(paste("每类最多展示", max_evidence, "条；展示截断不改变分析或覆盖结果。参数只是当前开发默认值，尚未作检测能力标定。"))
+  note("本版本尚未实现最终判断规则、公共题干排除、公式覆盖及开发/保留集效果评估。高覆盖可能来自共同来源或标准解法；低覆盖可能来自语法限制或改写。请结合原文核查。")
+  add("</div>")
+  paste(out, collapse = "\n")
+}
+# END R/report.R
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+``````
+
+``````{r evidence-report, results='asis', echo=FALSE}
+report_result <- analyze_rmd_pair(
+  params$input_a, params$input_b,
+  text_options = list(k = params$text_k, min_chars = params$text_min_chars,
+    min_similarity = params$text_min_similarity),
+  formula_options = list(min_steps = params$formula_min_steps,
+    max_steps = params$formula_max_steps, max_skips = params$formula_max_skips),
+  code_options = list(min_tokens = params$code_min_tokens,
+    window_tokens = params$code_window_tokens, max_skips = params$code_max_skips)
+)
+cat(detector_report_html(report_result, params$max_evidence))
+``````

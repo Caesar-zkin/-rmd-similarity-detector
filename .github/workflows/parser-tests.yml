@@ -17,7 +17,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -80,3 +80,30 @@ jobs:
 
       - name: Run code local demonstration
         run: Rscript examples/run-code-local-demo.R
+
+      - name: Check generated single-file detector
+        run: Rscript scripts/build-detector.R --check
+
+      - name: Run report integration tests
+        run: Rscript tests/test-report.R
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::rmarkdown
+            any::sessioninfo
+          install-pandoc: true
+          install-quarto: false
+          cache-version: report-v1
+
+      - name: Run standalone report render tests
+        run: Rscript tests/test-render-report.R
+
+      - name: Render mixed demonstration with CLI
+        run: Rscript scripts/render-detector.R
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-report-${{ matrix.os }}
+          path: reports-local/detector-report.html
+          retention-days: 7
