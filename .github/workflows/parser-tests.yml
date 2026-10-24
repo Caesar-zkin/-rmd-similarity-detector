@@ -38,3 +38,9 @@ jobs:
 
       - name: Run file-to-file text demo
         run: Rscript examples/run-text-demo.R
+
+      - name: Run approximate matching tests
+        run: Rscript tests/test-text-approx.R
+
+      - name: Run artificial edit demonstration
+        run: Rscript examples/run-text-approx-demo.R
