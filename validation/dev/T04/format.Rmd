@@ -1,0 +1,15 @@
+---
+title: "Synthetic development fixture"
+---
+
+# 分析
+
+> **本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。**
+
+$\bar{x}=\dfrac{1}{n}\sum_{i=1}^{n}x_i$
+
+```{r}
+values<-c(2,4,6)
+center<-mean( values )
+print(center)
+```

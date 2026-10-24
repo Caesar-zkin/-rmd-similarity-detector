@@ -87,6 +87,12 @@ jobs:
       - name: Run report integration tests
         run: Rscript tests/test-report.R
 
+      - name: Run development validation pipeline tests
+        run: Rscript tests/test-validation.R
+
+      - name: Run registered development experiment
+        run: Rscript scripts/run-validation.R
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |

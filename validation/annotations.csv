@@ -1,0 +1,81 @@
+"pair_id","side","kind","start","end","quote"
+"T01_exact","A","text","55","139","我们先核查观测值的缺失与异常情况，再比较样本中心和离散程度。均值容易受到极端值影响，因此同时报告中位数，并结合图形说明分布特征。结论只适用于本次样本，不能直接推广到总体。"
+"T01_exact","B","text","55","139","我们先核查观测值的缺失与异常情况，再比较样本中心和离散程度。均值容易受到极端值影响，因此同时报告中位数，并结合图形说明分布特征。结论只适用于本次样本，不能直接推广到总体。"
+"T01_format","A","text","55","139","我们先核查观测值的缺失与异常情况，再比较样本中心和离散程度。均值容易受到极端值影响，因此同时报告中位数，并结合图形说明分布特征。结论只适用于本次样本，不能直接推广到总体。"
+"T01_format","B","text","55","145","> **我们先核查观测值的缺失与异常情况，再比较样本中心和离散程度。均值容易受到极端值影响，因此同时报告中位数，并结合图形说明分布特征。结论只适用于本次样本，不能直接推广到总体。**"
+"T02_exact","A","math","55","116","$$
+\begin{aligned}
+x &= y \\
+y &= z \\
+z &= 1
+\end{aligned}
+$$"
+"T02_exact","B","math","55","116","$$
+\begin{aligned}
+x &= y \\
+y &= z \\
+z &= 1
+\end{aligned}
+$$"
+"T02_format","A","math","55","116","$$
+\begin{aligned}
+x &= y \\
+y &= z \\
+z &= 1
+\end{aligned}
+$$"
+"T02_format","B","math","55","119","$$
+\begin{aligned}
+x & = y \\
+y & = z \\
+z & = 1
+\end{aligned}
+$$"
+"T03_exact","A","code","55","122","```{r}
+values <- c(1, 2, 3)
+center <- mean(values)
+print(center)
+```"
+"T03_exact","B","code","55","122","```{r}
+values <- c(1, 2, 3)
+center <- mean(values)
+print(center)
+```"
+"T03_format","A","code","55","122","```{r}
+values <- c(1, 2, 3)
+center <- mean(values)
+print(center)
+```"
+"T03_format","B","code","55","118","```{r}
+values<-c(1,2,3)
+center<-mean( values )
+print(center)
+```"
+"T04_exact","A","text","55","133","本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。"
+"T04_exact","A","math","136","173","$\bar{x}=\frac{1}{n}\sum_{i=1}^{n}x_i$"
+"T04_exact","A","code","176","243","```{r}
+values <- c(2, 4, 6)
+center <- mean(values)
+print(center)
+```"
+"T04_exact","B","text","55","133","本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。"
+"T04_exact","B","math","136","173","$\bar{x}=\frac{1}{n}\sum_{i=1}^{n}x_i$"
+"T04_exact","B","code","176","243","```{r}
+values <- c(2, 4, 6)
+center <- mean(values)
+print(center)
+```"
+"T04_format","A","text","55","133","本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。"
+"T04_format","A","math","136","173","$\bar{x}=\frac{1}{n}\sum_{i=1}^{n}x_i$"
+"T04_format","A","code","176","243","```{r}
+values <- c(2, 4, 6)
+center <- mean(values)
+print(center)
+```"
+"T04_format","B","text","55","139","> **本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。**"
+"T04_format","B","math","142","180","$\bar{x}=\dfrac{1}{n}\sum_{i=1}^{n}x_i$"
+"T04_format","B","code","183","246","```{r}
+values<-c(2,4,6)
+center<-mean( values )
+print(center)
+```"
