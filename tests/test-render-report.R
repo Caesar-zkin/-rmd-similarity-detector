@@ -31,6 +31,7 @@ check(file.exists(file.path(temp, "report.html")), "standalone Rmd produces HTML
 check(!dir.exists(file.path(temp, "R")), "render needs no module directory")
 check(grepl("未启用最终判定", html, fixed = TRUE), "verdict status in rendered HTML")
 check(grepl("局部代码对应", html, fixed = TRUE) && grepl("推导步骤对应", html, fixed = TRUE), "code and multiline formula evidence rendered")
+check(grepl("证据整理：位置重叠与方法来源", html, fixed = TRUE) && grepl("largest_match", html, fixed = TRUE), "consolidated position evidence survives standalone rendering")
 check(!grepl("rmd_empty_units <- function", html, fixed = TRUE), "bundled implementation hidden in report")
 check(offline(html), "no external or relative resource dependencies")
 sentinel <- file.path(temp, "must-not-exist.txt")

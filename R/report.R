@@ -69,11 +69,15 @@ analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_op
     vapply(baseline, function(m) m$status, character(1)))
   overall <- if (any(manifest$read_status == "error")) "input_error" else if (info$status == "error") "exclusion_error" else
     if (any(statuses == "error")) "partial_failure" else if (any(statuses == "limited")) "limited" else "completed"
-  list(engine_version = "0.6.0-dev", verdict = "not_enabled", overall_status = overall,
+  result <- list(engine_version = "0.6.0-dev", verdict = "not_enabled", overall_status = overall,
     manifest = manifest, documents = docs, analysis_documents = analysis_docs, exclusions = info,
     baseline_modules = baseline, modules = modules,
     requested_options = list(text = text_options, formula_sequence = formula_options, code_local = code_options),
     r_version = as.character(getRversion()))
+  result$evidence <- if (all(manifest$read_status == "ok") && info$status != "error")
+    .report_module(function() summarize_pair_evidence(result)) else skip("输入或排除配置无效，未整理证据。")
+  if (result$evidence$status == "error") result$overall_status <- "partial_failure"
+  result
 }
 
 .report_table <- function(df) {
@@ -187,6 +191,20 @@ detector_report_html <- function(result, max_evidence = 10L) {
     note("排除前后的分母不同，不能只比较覆盖率高低。被排除区域仍作匹配边界，未解析诊断不会因排除自动清空。")
   } else note("未启用公共来源排除；共同题干仍可能形成匹配。")
   da <- result$documents$A; db <- result$documents$B
+  if (!is.null(result$evidence)) {
+    section("证据整理：位置重叠与方法来源")
+    note(paste("证据整理状态：", result$evidence$status))
+    if (nzchar(result$evidence$error)) add(.report_pre(result$evidence$error))
+    e <- result$evidence$value
+    if (!is.null(e)) {
+      note(paste("原始匹配记录", nrow(e$records), "条；位置分组", nrow(e$groups), "组；仅辅助原文比较", e$support_only_count, "条。以下表格各最多展示100行，完整记录保留在分析结果中。"))
+      add(.report_table(utils::head(e$groups, 100L)))
+      add(.report_table(utils::head(e$records[, c("record_id", "group_id", "kind", "module", "table", "source_row", "method", "level", "eligible", "matched_units"), drop = FALSE], 100L)))
+      if (length(e$issues)) add(.report_pre(paste(e$issues, collapse = "\n")))
+      note("同类记录只要在任一侧共享实际位置就归为一组。字符、token和公式步骤分开；分组不是独立性证明，也不产生综合分数。组内可能有不同对应或变量映射，不能将其拼成一个更长匹配；largest_match来自真实代表记录。unique_a/b只表示位置并集，行号范围只是外包范围。")
+      note("证据仅来自当前分析范围；启用公共来源排除时，不混入排除前结果。未知语法等仅辅助原文比较不提供有效长度，不触发判定。")
+    }
+  }
   section("文字：字符覆盖与片段"); text <- module("text")
   if (!is.null(text)) {
     note(paste("字符片段 Jaccard：", if (is.na(text$jaccard$similarity)) "信息不足" else format(text$jaccard$similarity, digits = 5)))

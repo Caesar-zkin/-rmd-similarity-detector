@@ -105,6 +105,9 @@ jobs:
       - name: Run explicit exclusion demonstration
         run: Rscript examples/run-exclusion-demo.R
 
+      - name: Run evidence consolidation tests
+        run: Rscript tests/test-evidence.R
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |
