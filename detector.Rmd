@@ -2679,6 +2679,48 @@ analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_op
   do.call(rbind, rows)
 }
 
+# Display existing decision data only; do not recompute or change the rules.
+.report_analysis_overview <- function(result) {
+  d <- result$decision
+  statuses <- vapply(result$modules, function(m) m$status, character(1))
+  status_labels <- c(ok = "正常", limited = "受限", error = "失败",
+    not_run = "未运行", not_applicable = "不适用",
+    insufficient_ngrams = "字符片段不足", insufficient_tokens = "代码token不足")
+  describe <- function(name) {
+    status <- unname(statuses[name])
+    if (length(status) != 1L || is.na(status)) return("未提供状态")
+    label <- unname(status_labels[status])
+    if (is.na(label)) status else paste0(label, "（", status, "）")
+  }
+  rows <- data.frame(
+    item = c("整体候选结论", "主要依据", "文字分析", "完整公式分析", "公式步骤分析",
+      "完整代码分析", "局部代码分析", "整体运行状态", "规则版本与触发路径", "判定性质"),
+    result = c(
+      if (is.null(d)) "未提供候选结论" else d$label,
+      if (is.null(d)) "未提供依据" else substr(paste(d$reasons, collapse = "；"), 1L, 4000L),
+      describe("text"), describe("formula_single"), describe("formula_sequence"),
+      describe("code_whole"), describe("code_local"), result$overall_status,
+      if (is.null(d)) "未提供" else paste(d$rules$version, d$pathway, sep = " / "),
+      "开发候选结论，规则未标定；正式判定未启用，不是抄袭概率。"),
+    stringsAsFactors = FALSE
+  )
+  names(rows) <- c("分析项目", "分析结果")
+  .report_table(rows)
+}
+
+.report_conclusion_guide <- function() {
+  rows <- data.frame(
+    conclusion = c("疑似抄袭", "未检出明显证据", "证据不足"),
+    meaning = c(
+      "至少一项有效证据达到当前开发规则的较强证据条件，需要人工核查对应片段及共同来源；不能据此认定抄袭。其他模块仍可能受限。",
+      "在当前支持范围内，比较内容量满足开发规则要求，且未发现达到规则条件或需要进一步复核的匹配；不代表证明无抄袭。",
+      "尚无有效证据触发较强证据条件，同时存在分析受限或失败、内容量不足，或仍需复核的匹配，因此无法给出明确倾向；不等于无抄袭。"),
+    stringsAsFactors = FALSE
+  )
+  names(rows) <- c("候选结论", "含义与使用方式")
+  .report_table(rows)
+}
+
 detector_report_html <- function(result, max_evidence = 10L) {
   max_evidence <- code_positive_integer(max_evidence, "max_evidence")
   if (max_evidence > 100L) stop("max_evidence must not exceed 100.")
@@ -2708,6 +2750,8 @@ detector_report_html <- function(result, max_evidence = 10L) {
     paste0("B：第", row$start_line_b, "—", row$end_line_b, "行"))
   add("<div class='detector-report'>")
   add("<div class='notice'><strong>未启用最终判定</strong><p>本报告提供相似片段及定位，不能证明抄袭、复制方向或数学/程序语义等价。参数尚未标定，不输出抄袭概率，也不平均三类指标。</p></div>")
+  section("整体抄袭分析概览（开发候选）")
+  add(.report_analysis_overview(result))
   if (!is.null(result$decision)) {
     d <- result$decision
     section("开发规则试判（未标定）")
@@ -2729,6 +2773,8 @@ detector_report_html <- function(result, max_evidence = 10L) {
   note("error 表示模块未完成，不能按零相似度处理；limited 表示只分析了支持的范围。not_applicable、insufficient等状态需结合原文核查。")
   if (any(result$manifest$read_status != "ok")) {
     note("输入读取失败，本次未运行分项比较。请检查路径、Rmd扩展名及UTF-8编码后重新运行。")
+    section("解析诊断与未覆盖内容")
+    add("<h3>三种候选结论是什么意思</h3>", .report_conclusion_guide())
     add("</div>"); return(paste(out, collapse = "\n"))
   }
   if (!is.null(result$exclusions) && result$exclusions$status != "not_requested") {
@@ -2830,6 +2876,8 @@ detector_report_html <- function(result, max_evidence = 10L) {
     note("只按顶层完整语句匹配，不进入函数/循环内部查找局部片段。完整单元与局部表可能重叠；覆盖按源token位置去重。")
   }
   section("解析诊断与未覆盖内容")
+  add("<h3>三种候选结论是什么意思</h3>", .report_conclusion_guide())
+  note("候选结论与运行状态分别解释：limited 表示分析范围受限，并不直接决定结论；已有有效较强证据时仍可给出候选疑似。以下诊断说明具体限制。")
   for (id in c("A", "B")) { add("<h3>", id, " 的解析诊断</h3>", .report_table(utils::head(result$documents[[id]]$diagnostics, 100L))) }
   for (name in c("formula_single", "formula_sequence", "code_whole", "code_local")) {
     value <- result$modules[[name]]$value

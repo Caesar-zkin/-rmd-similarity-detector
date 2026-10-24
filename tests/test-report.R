@@ -22,6 +22,19 @@ for (label in c("未启用最终判定", "文字：", "公式：", "代码：", 
   check(grepl(label, html, fixed = TRUE), paste("report section", label))
 check(!grepl("<script", html, fixed = TRUE), "report body has no executable scripts")
 check(!grepl("<img", html, fixed = TRUE), "report body has no external images")
+check(regexpr("整体抄袭分析概览", html, fixed = TRUE)[1L] <
+  regexpr("输入与分析概况", html, fixed = TRUE)[1L], "overall table precedes detailed input sections")
+check(grepl(.report_analysis_overview(r), html, fixed = TRUE), "overview includes current analysis values")
+check(grepl("<th>分析项目</th><th>分析结果</th>", html, fixed = TRUE), "overview is a two-column HTML table")
+guide <- .report_conclusion_guide()
+check(grepl(guide, substring(html, regexpr("解析诊断与未覆盖内容", html, fixed = TRUE)[1L]), fixed = TRUE),
+  "three-state definitions appear in diagnostics")
+for (label in c("疑似抄袭", "未检出明显证据", "证据不足"))
+  check(grepl(label, guide, fixed = TRUE), paste("conclusion definition", label))
+changed <- r
+changed$decision$label <- "<script>unsafe</script>"
+check(grepl("&lt;script&gt;unsafe&lt;/script&gt;", .report_analysis_overview(changed), fixed = TRUE) &&
+  !grepl("<script>", .report_analysis_overview(changed), fixed = TRUE), "overview escapes dynamic conclusion text")
 original <- r; invisible(detector_report_html(r, max_evidence = 1L))
 check(identical(r, original), "display limit does not change analysis")
 check(grepl("展示前 1 条", detector_report_html(r, 1L), fixed = TRUE), "display limits disclosed")
@@ -35,6 +48,7 @@ check(missing$overall_status == "input_error" && missing$manifest$read_status[1L
 check(all(vapply(missing$modules, function(m) m$status == "not_run", logical(1))), "no analysis after input failure")
 check(!grepl("matched_tokens", detector_report_html(missing), fixed = TRUE), "input failure not represented as zero matching")
 check(grepl("输入读取失败", detector_report_html(missing), fixed = TRUE), "input guidance included")
+check(grepl(guide, detector_report_html(missing), fixed = TRUE), "input error report retains conclusion definitions")
 bad_path <- analyze_rmd_pair(2, "examples/report-b.Rmd")
 check(bad_path$overall_status == "input_error", "invalid path type handled")
 temp <- tempfile("rmd-report-tests-"); dir.create(temp)
