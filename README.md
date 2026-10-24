@@ -15,6 +15,9 @@
 - [路线图](docs/roadmap.md)：阶段任务与验收要求。
 - [维护说明](CONTRIBUTING.md)：分支、提交与验证流程。
 - [更新日志](CHANGELOG.md)：项目版本进度。
+- [使用与交付说明](docs/delivery-guide.md)：环境准备、独立运行及报告解读。
+- [课程项目报告](docs/course-report.Rmd)：方法、测试结果与局限。
+- [AI 样本检查记录](docs/ai-pair-review.md)：三组探索样本的结果及限制。
 
 ## 目录
 
