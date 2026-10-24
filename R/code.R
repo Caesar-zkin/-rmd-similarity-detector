@@ -24,6 +24,10 @@ tokenize_r_code <- function(code, max_chars = 100000L, max_tokens = 20000L, max_
     normalized_key = NA_character_, renamed_key = NA_character_,
     variable_map = data.frame(name = character(), canonical = character()),
     status = "limited", parse_status = "error", rename_status = "unavailable", issues = character())
+  # Do not interpret submitted source-location directives or follow their filenames.
+  if (grepl("(?m)^[ \t]*#line[ \t]+", code, perl = TRUE)) {
+    result$parse_status <- "limited"; result$issues <- "unsupported_line_directive"; return(result)
+  }
   parsed <- tryCatch(parse(text = code, keep.source = TRUE, encoding = "UTF-8"), error = identity)
   if (inherits(parsed, "error")) {
     result$issues <- paste0("parse_error: ", conditionMessage(parsed)); return(result)
