@@ -46,5 +46,11 @@ report_result <- analyze_rmd_pair(
     window_tokens = params$code_window_tokens, max_skips = params$code_max_skips),
   exclusions = if (nzchar(params$exclusion_file)) params$exclusion_file else NULL
 )
-cat(detector_report_html(report_result, params$max_evidence))
+# 明确作为原始 HTML 输出，避免再次按 Markdown 解析
+cat(
+  "\n```{=html}\n",
+  detector_report_html(report_result, params$max_evidence),
+  "\n```\n",
+  sep = ""
+)
 ``````
