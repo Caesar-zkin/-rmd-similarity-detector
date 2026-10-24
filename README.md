@@ -134,3 +134,9 @@ prepare_math_steps保留每行与原公式单元的关系，支持有限align/al
 生成演示报告：`Rscript scripts/render-detector.R validation/boundary/fixtures/B03/a.Rmd validation/boundary/fixtures/B03/b.Rmd reports-local/prompt-excluded.html examples/prompt-exclusions.csv`。
 报告保留前后分母/匹配量、排除记录及原始诊断。来源真实性由操作者确认，不自动识别公共题干或标准解法。
 测试：`Rscript tests/test-exclusions.R`。详见[排除规格](docs/exclusion-spec.md)。
+
+## 三状态开发试判
+
+运行 `Rscript examples/run-decision-demo.R` 查看疑似抄袭、未检出明显证据和证据不足三个开发路径；测试为 `Rscript tests/test-decision.R`。
+报告自动展示decision及原始触发记录，CLI打印Development candidate，批量CSV保存candidate_verdict和规则版本。
+正式verdict仍为not_enabled。当前参数只是初始开发规则，没有独立答案或保留集准确率，不能按演示结果宣称已验证检测能力。详见[开发判定规格](docs/decision-spec.md)。

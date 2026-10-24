@@ -108,6 +108,12 @@ jobs:
       - name: Run evidence consolidation tests
         run: Rscript tests/test-evidence.R
 
+      - name: Run draft tri-state decision tests
+        run: Rscript tests/test-decision.R
+
+      - name: Run draft decision demonstration
+        run: Rscript examples/run-decision-demo.R
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |

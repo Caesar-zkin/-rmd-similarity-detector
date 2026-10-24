@@ -27,3 +27,5 @@ result <- tryCatch(rmarkdown::render(file.path(root, "detector.Rmd"), output_fil
   envir = env, quiet = TRUE), finally = unlink(temp, recursive = TRUE))
 cat("Report written:", result, "\n")
 cat("Analysis status:", env$report_result$overall_status, "\nFinal verdict: not enabled.\n")
+
+cat("Development candidate:", env$report_result$decision$label, "(", env$report_result$decision$pathway, ")\n")

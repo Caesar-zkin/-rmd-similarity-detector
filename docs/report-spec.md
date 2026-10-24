@@ -3,7 +3,7 @@
 ## 当前能力
 
 detector.Rmd接收两份Rmd路径，读取后运行文字、完整公式、公式步骤、完整代码及局部代码五个接口，输出三类分项证据HTML。
-当前verdict固定not_enabled（未启用最终判定），不生成抄袭概率或综合平均分。
+当前verdict固定not_enabled（未启用最终判定），decision字段新增三状态开发试判及规则版本、触发记录，参数未标定。两者分开展示，不生成抄袭概率或综合平均分。
 模块失败保留error，不伪装为零相似度；其他独立模块继续。任一输入读取失败则不运行分项分析，输出输入错误报告。
 
 报告顺序：运行/判定状态、文件概况、分项结果、原文对照与行号、解析/模块诊断、参数及限制。
@@ -15,7 +15,7 @@ detector.Rmd接收两份Rmd路径，读取后运行文字、完整公式、公�
 
 - R/report.R：整合分析、捕获错误/警告、HTML转义及证据展示。
 - templates/detector-template.Rmd：可信报告模板、样式、输入和分析参数。
-- scripts/build-detector.R：按固定顺序内嵌11个R模块，生成detector.Rmd。
+- scripts/build-detector.R：按固定顺序内嵌12个R模块，生成detector.Rmd。
 - detector.Rmd：已提交的生成文件，包含所需函数，不依赖运行目录的R/。
 - scripts/render-detector.R：CLI编译助手。
 - examples/report-a.Rmd和report-b.Rmd：自建文字/多行公式/代码综合示例。
@@ -71,7 +71,7 @@ tests/test-render-report.R：将单个Rmd复制到无R/的临时目录，在中�
 检查关键证据、未启用判定状态、恶意输入不执行，最终HTML资源仅允许data:或页内引用。
 这些是结构及运行测试，不等于实际检测效果评价。
 
-最终判定、自动公共来源识别、公式覆盖、跨方法证据的最终支持规则及开发/保留集效果评估仍未完成。明确标注的完整解析单元现可排除，详见exclusion-spec.md。
+正式判定、自动公共来源识别、公式覆盖及开发/保留集效果评估仍未完成。既定三状态的初始规则已经接入开发试判，尚未标定，详见decision-spec.md。明确标注的完整解析单元现可排除，详见exclusion-spec.md。
 未知语法、窗口/种子、保守改名及规模上限会限制召回；参数必须通过后续开发实验再冻结。
 
 格式依据：

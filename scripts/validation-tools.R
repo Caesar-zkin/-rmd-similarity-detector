@@ -87,6 +87,9 @@ run_development_validation <- function(root = ".", output = file.path(root, "rep
     math <- result$modules$formula_sequence$value
     row <- data.frame(pair_id = p$pair_id, task_id = p$task_id, variant = p$variant,
       label = p$label, overall_status = result$overall_status, verdict = result$verdict,
+      candidate_verdict = result$decision$verdict, candidate_label = result$decision$label,
+      candidate_pathway = result$decision$pathway, rule_version = result$decision$rules$version,
+      decision_stage = result$decision$stage,
       text_jaccard = if (is.null(text)) NA_real_ else text$jaccard$similarity,
       text_coverage_a = number(text$coverage, "coverage", "A"), text_coverage_b = number(text$coverage, "coverage", "B"),
       code_coverage_a = number(code$coverage, "coverage", "A"), code_coverage_b = number(code$coverage, "coverage", "B"),
@@ -97,7 +100,7 @@ run_development_validation <- function(root = ".", output = file.path(root, "rep
     }
     row$formula_sequences <- count(math$matches)
     rows[[i]] <- row
-    cat(p$pair_id, result$overall_status, "verdict:", result$verdict, "\n")
+    cat(p$pair_id, result$overall_status, "verdict:", result$verdict, "candidate:", result$decision$verdict, "\n")
   }
   inputs <- unique(c(manifest$ready$source_file, manifest$ready$target_file))
   tracked <- unique(c(inputs, "validation/tasks.csv", "validation/pairs.csv", "validation/annotations.csv",
@@ -108,7 +111,7 @@ run_development_validation <- function(root = ".", output = file.path(root, "rep
   bundle <- list(schema_version = "2", created_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
     commit = commit, hashes = hashes, r_version = as.character(getRversion()), session = sessionInfo(),
     manifest = manifest, results = do.call(rbind, rows), localization = do.call(rbind, localization), details = details,
-    note = "Synthetic development observations only. No verdict, accuracy, or held-out evaluation. Per-module effective parameters are retained in details.")
+    note = "Synthetic development observations only. Draft candidate decisions only; no final verdict, accuracy, or held-out evaluation. Per-module effective parameters are retained in details.")
   dir.create(output, recursive = TRUE, showWarnings = FALSE)
   utils::write.csv(bundle$results, file.path(output, "results.csv"), row.names = FALSE, fileEncoding = "UTF-8")
   utils::write.csv(bundle$localization, file.path(output, "localization.csv"), row.names = FALSE, fileEncoding = "UTF-8")

@@ -77,6 +77,12 @@ analyze_rmd_pair <- function(input_a, input_b, text_options = list(), formula_op
   result$evidence <- if (all(manifest$read_status == "ok") && info$status != "error")
     .report_module(function() summarize_pair_evidence(result)) else skip("输入或排除配置无效，未整理证据。")
   if (result$evidence$status == "error") result$overall_status <- "partial_failure"
+  result$decision <- tryCatch(evaluate_candidate_decision(result), error = function(e)
+    list(status = "error", stage = "development_unvalidated", verdict = "insufficient_evidence", label = "证据不足",
+      pathway = "decision_error", reasons = paste("开发规则评估失败：", conditionMessage(e)),
+      limitations = "规则尚未完成效果标定；失败不视为零匹配。", rules = decision_rules_v1(),
+      trigger_records = data.frame(), adequacy = data.frame()))
+  if (result$decision$status == "error") result$overall_status <- "partial_failure"
   result
 }
 
@@ -159,6 +165,19 @@ detector_report_html <- function(result, max_evidence = 10L) {
     paste0("B：第", row$start_line_b, "—", row$end_line_b, "行"))
   add("<div class='detector-report'>")
   add("<div class='notice'><strong>未启用最终判定</strong><p>本报告提供相似片段及定位，不能证明抄袭、复制方向或数学/程序语义等价。参数尚未标定，不输出抄袭概率，也不平均三类指标。</p></div>")
+  if (!is.null(result$decision)) {
+    d <- result$decision
+    section("开发规则试判（未标定）")
+    add("<div class='notice'><strong>", report_escape(d$label), "</strong></div>")
+    note(paste("规则版本：", d$rules$version, "；触发路径：", d$pathway))
+    add(.report_pre(paste(d$reasons, collapse = "\n")))
+    note("此处是开发候选结论；正式判定仍未启用。未检出明显证据不代表证明无抄袭，证据不足也不等同于无抄袭。")
+    add(.report_table(d$trigger_records))
+    note("以下为两侧当前可比较内容量；公式步骤和公式token只作开发规则的内容量检查，不是公式覆盖率。")
+    add(.report_table(d$adequacy))
+    add(.report_pre(paste(d$limitations, collapse = "\n")))
+    add("<details><summary>开发规则参数</summary>", .report_table(.report_params(d$rules)), "</details>")
+  }
   note(paste("运行状态：", result$overall_status, "；引擎：", result$engine_version, "；R：", result$r_version))
   section("输入与分析概况"); add(.report_table(result$manifest))
   labels <- c(text = "文字", formula_single = "完整公式", formula_sequence = "公式步骤", code_whole = "完整代码", code_local = "局部代码")

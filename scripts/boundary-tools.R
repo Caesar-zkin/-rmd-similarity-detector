@@ -43,6 +43,9 @@ run_boundary_validation <- function(root = ".", output = file.path(root, "report
     single <- r$modules$formula_single$value; sequence <- r$modules$formula_sequence$value
     row <- data.frame(case_id = c$case_id, kind = c$kind, reference_role = c$role,
       expected_behavior = c$expected_behavior, overall_status = r$overall_status, verdict = r$verdict,
+      candidate_verdict = r$decision$verdict, candidate_label = r$decision$label,
+      candidate_pathway = r$decision$pathway, rule_version = r$decision$rules$version,
+      decision_stage = r$decision$stage,
       text_jaccard = if (is.null(text)) NA_real_ else text$jaccard$similarity,
       text_coverage_a = coverage_value(text$coverage, "coverage", "A"),
       text_coverage_b = coverage_value(text$coverage, "coverage", "B"),
