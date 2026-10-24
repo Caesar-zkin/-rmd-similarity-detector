@@ -33,7 +33,8 @@ check(grepl("未启用最终判定", html, fixed = TRUE), "verdict status in ren
 check(grepl("开发规则试判（未标定）", html, fixed = TRUE) && grepl("development-v1", html, fixed = TRUE), "draft tri-state decision and rule version survive standalone render")
 check(grepl("局部代码对应", html, fixed = TRUE) && grepl("推导步骤对应", html, fixed = TRUE), "code and multiline formula evidence rendered")
 check(grepl("证据整理：位置重叠与方法来源", html, fixed = TRUE) && grepl("largest_match", html, fixed = TRUE), "consolidated position evidence survives standalone rendering")
-check(!grepl("rmd_empty_units <- function", html, fixed = TRUE), "bundled implementation hidden in report")
+check(!any(vapply(c("rmd_empty_units", "group_position_evidence", "# BEGIN R/parser.R"),
+  function(marker) grepl(marker, html, fixed = TRUE), logical(1))), "bundled implementation hidden after HTML escaping")
 check(offline(html), "no external or relative resource dependencies")
 sentinel <- file.path(temp, "must-not-exist.txt")
 poison <- paste0("---\nauthor: !expr stop('YAML must not run')\n---\n\n```{r}\n",
@@ -56,5 +57,40 @@ check(grepl("公共来源：明确标注与排除前后", filtered, fixed = TRUE
 check(grepl("排除前", filtered, fixed = TRUE) && grepl("排除后", filtered, fixed = TRUE), "rendered report retains both scopes")
 check(grepl("操作者确认其公共来源", filtered, fixed = TRUE), "rendered source reference retained")
 check(offline(filtered), "exclusion report stays self-contained offline")
+
+# Exercise the actual command-line entry in a clean standalone installation.
+# Direct rmarkdown::render tests do not cover its intermediates_dir behavior.
+cli_root <- file.path(temp, "独立 CLI")
+dir.create(file.path(cli_root, "scripts"), recursive = TRUE)
+file.copy("detector.Rmd", file.path(cli_root, "detector.Rmd"))
+file.copy("scripts/render-detector.R", file.path(cli_root, "scripts/render-detector.R"))
+cli_script <- normalizePath(file.path(cli_root, "scripts/render-detector.R"), winslash = "/")
+rscript <- unname(Sys.which("Rscript"))
+if (!nzchar(rscript)) rscript <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
+cli <- function(a, b, name, exclusions = "") {
+  output <- file.path(cli_root, name)
+  args <- c(cli_script, normalizePath(a, winslash = "/"), normalizePath(b, winslash = "/"), output)
+  if (nzchar(exclusions)) args <- c(args, normalizePath(exclusions, winslash = "/"))
+  log <- suppressWarnings(system2(rscript, vapply(args, shQuote, character(1)), stdout = TRUE, stderr = TRUE))
+  status <- attr(log, "status"); if (is.null(status)) status <- 0L
+  if (status != 0L) cat(paste(tail(log, 30L), collapse = "\n"), "\n")
+  check(status == 0L && file.exists(output), "standalone CLI generates an HTML report")
+  check(!any(grepl("Could not convert TeX math", log, fixed = TRUE)), "CLI does not parse hidden R source as TeX")
+  value <- paste(readLines(output, encoding = "UTF-8", warn = FALSE), collapse = "\n")
+  check(grepl("<div[^>]*class=['\"]detector-report['\"]", value, perl = TRUE) &&
+    grepl("<h2[^>]*>开发规则试判（未标定）</h2>", value, perl = TRUE), "CLI contains actual rendered evidence sections")
+  check(!any(vapply(c("rmd_empty_units", "group_position_evidence", "# BEGIN R/parser.R"),
+    function(marker) grepl(marker, value, fixed = TRUE), logical(1))), "CLI HTML contains no bundled implementation")
+  check(offline(value), "CLI HTML remains self-contained")
+  value
+}
+cli_filtered <- cli(pa, pb, "题干 排除.html", exclusion_csv)
+check(grepl("排除后", cli_filtered, fixed = TRUE), "CLI fourth-argument exclusions retained")
+writeLines(enc2utf8(poison), pa, useBytes = TRUE); writeLines(enc2utf8(poison), pb, useBytes = TRUE)
+cli_safe <- cli(pa, pb, "输入 转义.html")
+check(!file.exists(sentinel), "CLI never evaluates submitted Rmd")
+check(grepl("&lt;script id=", cli_safe, fixed = TRUE) &&
+  !grepl("<script id=['\"]rmd-poison", cli_safe, perl = TRUE), "CLI preserves escaped input payload")
+check(!dir.exists(file.path(cli_root, "R")), "CLI installation requires no R module directory")
 unlink(temp, recursive = TRUE)
 cat("All", count, "standalone-render assertions passed.\n")

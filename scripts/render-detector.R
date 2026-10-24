@@ -21,9 +21,16 @@ exclusion_file <- if (length(args) == 4L) absolute(args[4L]) else ""
 if (!grepl("\\.html$", output, ignore.case = TRUE)) stop("Output must have an .html extension.")
 dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
 temp <- tempfile("rmd-report-intermediates-"); dir.create(temp)
+# Render a trusted standalone copy. A separate intermediates_dir makes rmarkdown
+# scan the unknitted Rmd for resources, feeding hidden engine source to Pandoc.
+trusted_input <- file.path(temp, "detector.Rmd")
+if (!file.copy(file.path(root, "detector.Rmd"), trusted_input)) {
+  unlink(temp, recursive = TRUE)
+  stop("Could not prepare the trusted detector copy.")
+}
 env <- new.env(parent = globalenv())
-result <- tryCatch(rmarkdown::render(file.path(root, "detector.Rmd"), output_file = basename(output),
-  output_dir = dirname(output), intermediates_dir = temp, params = list(input_a = input_a, input_b = input_b, exclusion_file = exclusion_file),
+result <- tryCatch(rmarkdown::render(trusted_input, output_file = basename(output),
+  output_dir = dirname(output), params = list(input_a = input_a, input_b = input_b, exclusion_file = exclusion_file),
   envir = env, quiet = TRUE), finally = unlink(temp, recursive = TRUE))
 cat("Report written:", result, "\n")
 cat("Analysis status:", env$report_result$overall_status, "\nFinal verdict: not enabled.\n")

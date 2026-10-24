@@ -39,6 +39,9 @@ Rscript scripts/render-detector.R
 Rscript scripts/render-detector.R A.Rmd B.Rmd reports-local/my-report.html
 
 CLI相对路径基于当前工作目录，带空格路径应加引号。只允许html输出扩展名。
+CLI将可信detector.Rmd复制到临时目录后编译，不另设intermediates_dir，结束后清理临时目录。
+这样避免rmarkdown在执行代码块前为复制资源而扫描原始Rmd，将隐藏引擎的R代码误交给Pandoc数学转换。
+待检测文件仍仅按绝对路径传入解析器，不复制为待编译文档。此修正不更改分析方法、参数或候选判定。
 也可直接在RStudio Knit detector.Rmd，先修改顶部params.input_a/input_b。
 复制单个detector.Rmd到其他目录仍可运行，但需把参数改成有效输入路径；默认示例路径仅在仓库内成立。
 R中可用rmarkdown::render('detector.Rmd', params=list(input_a='A.Rmd', input_b='B.Rmd'))。
@@ -69,6 +72,7 @@ CI输出的示例HTML作为短期artifact，内容仅为自建综合示例及B03
 tests/test-report.R：五接口整合、输入错误、资源错误、转义、不执行输入、展示限制、空文件及可重复构建。
 tests/test-render-report.R：将单个Rmd复制到无R/的临时目录，在中文/空格路径下真实编译；
 检查关键证据、未启用判定状态、恶意输入不执行，最终HTML资源仅允许data:或页内引用。
+同时在只有detector.Rmd与CLI脚本的独立目录中运行真实Rscript子进程，检查三/四参数、中文空格路径、无隐藏源码/TeX转换警告、输入不执行和转义。
 这些是结构及运行测试，不等于实际检测效果评价。
 
 正式判定、自动公共来源识别、公式覆盖及开发/保留集效果评估仍未完成。既定三状态的初始规则已经接入开发试判，尚未标定，详见decision-spec.md。明确标注的完整解析单元现可排除，详见exclusion-spec.md。
