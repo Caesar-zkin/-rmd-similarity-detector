@@ -62,3 +62,9 @@ jobs:
 
       - name: Run formula sequence demonstration
         run: Rscript examples/run-math-sequence-demo.R
+
+      - name: Run multiline formula tests
+        run: Rscript tests/test-math-multiline.R
+
+      - name: Run multiline formula demonstration
+        run: Rscript examples/run-math-multiline-demo.R

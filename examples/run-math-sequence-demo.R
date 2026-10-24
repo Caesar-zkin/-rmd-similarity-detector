@@ -18,4 +18,4 @@ if (nrow(result$matches)) {
   print(result$matches$step_pairs[[1L]][, c("content_a", "content_b", "start_line_a", "start_line_b")])
   cat("Skipped B units:", result$matches$skipped_units_b[[1L]], "\n")
 }
-cat("Separate formula units only. Step ratio is not plagiarism probability or formula coverage.\n")
+cat("Supported formula steps only. Step ratio is not plagiarism probability or formula coverage.\n")

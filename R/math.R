@@ -161,3 +161,160 @@ compare_math_pair <- function(doc_a, doc_b, max_pairs = 10000L) {
     pair_count = pair_count, max_pairs = max_pairs,
     diagnostics = list(a = doc_a$diagnostics, b = doc_b$diagnostics))
 }
+
+# Return source-indexed rows. Unsupported structures remain a single barrier.
+.math_step_plan <- function(unit) {
+  chars <- strsplit(unit$content, "", fixed = TRUE)[[1L]]
+  n <- length(chars)
+  if (n > 20000L) stop("Formula character limit exceeded (20000).")
+  cut <- function(a, b) if (a > b) "" else paste0(chars[seq.int(a, b)], collapse = "")
+  ws <- c(" ", "\t", "\n", "\r", "\f", "\v")
+  trim <- function(a, b) {
+    while (a <= b && chars[a] %in% ws) a <- a + 1L
+    while (b >= a && chars[b] %in% ws) b <- b - 1L
+    c(a, b)
+  }
+  mode <- ""; issues <- character()
+  fallback <- function(issue) list(environment = mode,
+    rows = list(list(start = 1L, end = n, drop = integer())), issues = issue)
+  supported <- c("align", "align*", "aligned", "gather", "gather*", "gathered", "equation", "equation*")
+  opening <- regmatches(unit$raw, regexpr("^\\\\begin\\{[A-Za-z*]+\\}", unit$raw))
+  if (length(opening) && nzchar(opening)) {
+    mode <- sub("^\\\\begin\\{([^}]+)\\}$", "\\1", opening)
+    if (!mode %in% supported) return(fallback("unsupported_step_environment"))
+  }
+  bounds <- trim(1L, n); lo <- bounds[1L]; hi <- bounds[2L]
+  # Permit a single row environment inside an equation wrapper, or one display wrapper.
+  repeat {
+    body <- cut(lo, hi)
+    opener <- regmatches(body, regexpr("^\\\\begin\\{[A-Za-z*]+\\}", body))
+    if (!length(opener) || !nzchar(opener)) break
+    name <- sub("^\\\\begin\\{([^}]+)\\}$", "\\1", opener)
+    if (!name %in% supported || (nzchar(mode) &&
+        !(mode %in% c("equation", "equation*") && name %in% c("aligned", "gathered"))))
+      return(fallback("unsupported_nested_environment"))
+    closer <- paste0("\\end{", name, "}")
+    if (!endsWith(body, closer) || nchar(body) < nchar(opener) + nchar(closer))
+      return(fallback("unclosed_step_environment"))
+    mode <- name
+    bounds <- trim(lo + nchar(opener), hi - nchar(closer))
+    lo <- bounds[1L]; hi <- bounds[2L]
+  }
+  row_mode <- mode %in% c("align", "align*", "aligned", "gather", "gather*", "gathered")
+  align_mode <- mode %in% c("align", "align*", "aligned")
+  rows <- list(); start <- lo; dropped <- integer(); ampersands <- 0L; depth <- 0L; p <- lo
+  emit <- function(end) {
+    bounds <- trim(start, end)
+    rows[[length(rows) + 1L]] <<- list(start = bounds[1L], end = bounds[2L], drop = dropped)
+    if (ampersands > 1L) issues <<- c(issues, "multiple_alignment_columns")
+  }
+  while (p <= hi) {
+    ch <- chars[p]
+    if (ch == "\\") {
+      if (p < hi && chars[p + 1L] == "\\") {
+        if (depth == 0L) {
+          if (!row_mode) return(fallback("row_break_outside_supported_environment"))
+          emit(p - 1L)
+          p <- p + 2L
+          if (p <= hi && chars[p] == "*") p <- p + 1L
+          if (p <= hi && chars[p] == "[") {
+            q <- p + 1L
+            while (q <= hi && chars[q] != "]") q <- q + 1L
+            spacing <- trimws(cut(p + 1L, q - 1L))
+            if (q > hi || !grepl("^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(pt|pc|bp|dd|cc|sp|mm|cm|in|em|ex)$", spacing))
+              return(fallback("unsupported_row_spacing"))
+            p <- q + 1L
+          }
+          start <- p; dropped <- integer(); ampersands <- 0L
+          next
+        }
+        p <- p + 2L; next
+      }
+      q <- p + 1L
+      while (q <= hi && grepl("^[A-Za-z]$", chars[q])) q <- q + 1L
+      command <- cut(p + 1L, q - 1L)
+      if (command %in% c("begin", "end")) return(fallback("unsupported_nested_environment"))
+      if (depth == 0L && command %in% c("notag", "nonumber"))
+        dropped <- c(dropped, seq.int(p, q - 1L))
+      p <- if (q == p + 1L) min(p + 2L, hi + 1L) else q
+      next
+    }
+    if (ch == "{") depth <- depth + 1L
+    if (ch == "}") depth <- depth - 1L
+    if (depth < 0L) return(fallback("unbalanced_step_braces"))
+    if (ch == "&" && depth == 0L) {
+      if (!align_mode) return(fallback("alignment_outside_supported_environment"))
+      ampersands <- ampersands + 1L; dropped <- c(dropped, p)
+    }
+    p <- p + 1L
+  }
+  if (depth != 0L) return(fallback("unbalanced_step_braces"))
+  last <- trim(start, hi)
+  # A trailing row break is allowed; empty internal rows are retained as barriers.
+  if (last[1L] <= last[2L] || !length(rows)) emit(hi)
+  if (any(vapply(rows, function(r) r$start > r$end, logical(1))) && length(rows) > 1L)
+    issues <- c(issues, "empty_internal_math_row")
+  list(environment = mode, rows = rows, issues = unique(issues))
+}
+
+prepare_math_steps <- function(doc, max_steps = 500L) {
+  if (!inherits(doc, "rmd_document")) stop("doc must be an rmd_document.")
+  if (!is.numeric(max_steps) || length(max_steps) != 1L || is.na(max_steps) ||
+      !is.finite(max_steps) || max_steps < 1 || max_steps != floor(max_steps) || max_steps > .Machine$integer.max)
+    stop("max_steps must be a representable positive integer.")
+  units <- doc$units[doc$units$type == "math", , drop = FALSE]
+  result <- units[FALSE, , drop = FALSE]
+  for (name in c("parent_unit_id", "parent_raw", "environment", "comparison_content", "normalized", "math_status"))
+    result[[name]] <- character()
+  result$step_index <- integer(); result$token_count <- integer()
+  result$comparison_positions <- I(list()); result$details <- I(list())
+  source_chars <- strsplit(doc$source, "", fixed = TRUE)[[1L]]
+  line_starts <- c(1L, which(source_chars == "\n") + 1L)
+  for (i in seq_len(nrow(units))) {
+    parent <- units[i, , drop = FALSE]
+    chars <- strsplit(parent$content, "", fixed = TRUE)[[1L]]
+    plan <- .math_step_plan(parent)
+    if (nrow(result) + length(plan$rows) > max_steps) stop("Expanded formula step limit exceeded.")
+    rows <- lapply(seq_along(plan$rows), function(j) {
+      span <- plan$rows[[j]]
+      ids <- if (span$start <= span$end) seq.int(span$start, span$end) else integer()
+      keep <- ids[!ids %in% span$drop]
+      raw <- paste0(chars[ids], collapse = "")
+      comparison <- paste0(chars[keep], collapse = "")
+      positions <- as.integer(parent$content_start + keep - 1L)
+      details <- normalize_math(comparison)
+      details$source_positions <- lapply(details$source_positions, function(p) positions[p])
+      details$comparison_content <- comparison; details$raw <- raw
+      row <- parent
+      row$parent_unit_id <- parent$unit_id; row$parent_raw <- parent$raw
+      row$environment <- plan$environment; row$step_index <- as.integer(j)
+      if (nzchar(plan$environment) || length(plan$rows) > 1L)
+        row$unit_id <- paste0(parent$unit_id, ":s", sprintf("%03d", j))
+      row$content_start <- as.integer(parent$content_start + span$start - 1L)
+      row$content_end <- as.integer(parent$content_start + span$end - 1L)
+      row$start_offset <- row$content_start; row$end_offset <- row$content_end
+      row$start_line <- as.integer(findInterval(row$start_offset, line_starts))
+      row$end_line <- as.integer(findInterval(max(row$start_offset, row$end_offset), line_starts))
+      row$start_column <- as.integer(row$start_offset - line_starts[row$start_line] + 1L)
+      row$end_column <- as.integer(row$end_offset - line_starts[row$end_line] + 1L)
+      row$raw <- raw; row$content <- raw; row$comparison_content <- comparison
+      row$normalized <- details$normalized; row$math_status <- details$status
+      row$token_count <- as.integer(details$token_count)
+      row$comparison_positions <- I(list(positions)); row$details <- I(list(details))
+      row[, names(result), drop = FALSE]
+    })
+    issues <- unique(c(plan$issues, if (parent$status != "ok") "parser_limited",
+      unlist(lapply(rows, function(r) r$details[[1L]]$issues), use.names = FALSE)))
+    if (length(rows) > 1L && any(vapply(rows, function(r) r$math_status == "empty", logical(1))))
+      issues <- unique(c(issues, "empty_internal_math_row"))
+    # Any unsupported row limits the whole parent; do not silently salvage it.
+    if (length(issues)) rows <- lapply(rows, function(row) {
+      row$math_status <- "limited"; row$details[[1L]]$status <- "limited"
+      row$details[[1L]]$issues <- issues; row$details[[1L]]$structure_key <- NA_character_
+      row
+    })
+    for (row in rows) result <- rbind(result, row)
+  }
+  rownames(result) <- NULL
+  result
+}

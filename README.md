@@ -2,7 +2,7 @@
 
 基于 R Markdown 的文字、数学公式与 R 代码相似性检测课程项目。
 
-当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。新增分别定界公式的多步一致映射与受限步骤插删。多行公式环境、深度语义改写、代码相似度、最终判定和detector.Rmd尚未实现。
+当前分支：文字模块与v0.4.0公式基础开发中。解析器已合入main；本分支已有正文Jaccard、精确匹配、候选窗口、近似局部对齐和双向覆盖率。新增单条公式原始/排版/一致改名比较。新增单独公式和有限多行环境的多步一致映射与受限步骤插删。复杂公式环境、深度语义改写、代码相似度、最终判定和detector.Rmd尚未实现。
 
 ## 项目目标
 
@@ -91,4 +91,11 @@ doc$diagnostics
 运行 `Rscript examples/run-math-sequence-demo.R`；可追加两份Rmd路径。
 新增R/math-sequences.R，加载在math.R之后；测试为 `Rscript tests/test-math-sequences.R`。
 整段共用一一变量映射，允许预算内跳过内部步骤并记录位置。示例匹配3步、跳过1步，步骤比例0.75。
-当前每个分别定界的公式算一步，尚不支持多行环境拆分；不输出公式覆盖率或抄袭结论。
+步骤包括单独公式和受支持多行环境的行；不输出公式覆盖率或抄袭结论。
+
+## 多行公式演示
+
+运行 `Rscript examples/run-math-multiline-demo.R`；可追加两份Rmd路径。
+测试：`Rscript tests/test-math-multiline.R`。加载顺序仍为parser.R → math.R → math-sequences.R。
+prepare_math_steps保留每行与原公式单元的关系，支持有限align/aligned、gather/gathered及equation包装。
+多列、未知命令和复杂嵌套标受限；不是完整LaTeX或数学等价分析。

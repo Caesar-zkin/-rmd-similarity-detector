@@ -44,7 +44,7 @@ token_count只用于描述当前序列长度，尚不是标定过的有效证据
 受限内容不参加规范化或改名匹配；完全相同的非空原始表达仍记录raw_equal并标limited。
 text/字体参数是保守的字面内容，不解释其中嵌套宏。
 这里只做词法扫描及部分分组检查，不保证命令参数数量、表达式或TeX排版语法合法。
-多行环境、宏定义及一般数学等价待后续实现；分别定界的公式单元已支持受限序列匹配。
+已支持有限多行环境的步骤拆分；复杂嵌套环境、宏定义及一般数学等价待后续实现。
 不得把状态ok解释为数学正确或文档已完整分析。
 
 整体status：解析诊断或公式受限优先为limited；任一侧没有公式则not_applicable；
@@ -64,7 +64,7 @@ text/字体参数是保守的字面内容，不解释其中嵌套宏。
 ## 多步推导入口
 
 依次加载parser.R、math.R、math-sequences.R，调用find_math_sequences(doc_a, doc_b)。
-每个单独定界的math单元视为一步；尚未拆分align/aligned等多行环境。
+步骤来自prepare_math_steps：普通math单元或受支持多行环境中的一行。
 旧的单条公式接口不改变，也不把逐条独立改名结果拼成连续证据。
 
 默认min_steps=2、max_steps=5、max_skips=1、max_source_gap=2000。
@@ -96,7 +96,7 @@ step_similarity = 匹配步骤数 / (匹配步骤数 + 两侧内部跳过步骤�
 token_count是匹配步骤A侧规范化token数之和，仅作描述；不累加被跳过步骤。
 
 每条结果还有list列：
-- step_pairs：逐步两侧单元ID、原始content、起止行及逐token源位置。
+- step_pairs：逐步两侧步骤ID、原公式单元ID、步骤序号、原始content、起止行及逐token源位置。
 - variable_map：整段推导统一的一一变量映射。
 - skipped_units_a/b：两侧被跳过单元ID，可在formulas_a/b中查原文。
 - raw_equal、normalized_equal：所有已匹配步骤是否在该层相同；跳过步骤不影响这些标记。
@@ -109,7 +109,7 @@ token_count是匹配步骤A侧规范化token数之和，仅作描述；不累加
 
 ## 规模与状态
 
-默认每侧max_formulas=500，初始位置对max_pairs=10000。
+默认每侧max_formulas=500，同时限制原公式单元数及展开后的步骤数；展开后的初始位置对max_pairs=10000。
 每次尝试在已有映射下配对公式计1个state；max_states=20000。
 token_work按每次尝试两侧token数的较大值累计，max_token_work=5000000。
 max_results=1000约束去除包含结果前的终止路径数。
@@ -124,3 +124,50 @@ limited优先于其他状态；没有公式为not_applicable；任一侧支持�
 演示匹配x=y、y=z、z=1到a=b、b=c、c=1，B中间插入7=8：
 匹配3步、跳过1步、步骤比例0.75，映射x→a、y→b、z→c。
 插入公式并不要求数学正确；本演示只验证算法行为。
+
+## 多行环境拆分
+
+prepare_math_steps(doc, max_steps=500L)位于math.R，不新增加载依赖；find_math_sequences已改用该步骤表。
+compare_math_pair仍比较完整公式单元，其输出不因步骤拆分而改变。
+对整块align进行完整单条词法比较仍可能标limited；这不等于步骤接口也无法分析，两个接口的范围不同。
+
+支持裸align/align*、gather/gather*、equation/equation*（需先被解析器识别为math）。
+显示定界符内可有上述环境或aligned/gathered包装；
+equation/equation*中允许一层aligned/gathered，其余嵌套明确标受限。
+裸aligned/gathered不在解析器支持范围，应放在显示定界符内。
+
+只在顶层花括号深度0的双反斜线处分行，支持可选星号和紧接的简单数值长度参数，例如[2pt]。
+长度单位支持pt/pc/bp/dd/cc/sp/mm/cm/in/em/ex；未知或未闭合长度参数使整块受限。
+允许尾部换行分隔符；内部空行步骤使整块受限。
+同一物理源行中可以有多个步骤，定位使用字符位置，不假定每步占一源行。
+
+align/aligned每行最多允许一个顶层&，仅作对齐标记去除；gather系列禁止顶层&。
+文本/字体参数等花括号组内不拆行、不删除&；转义的&与花括号保留。
+顶层notag/nonumber命令仅控制编号，步骤比较时忽略。
+其余命令仍由单条规范化支持清单决定；label/tag/intertext等暂不支持。
+不展开宏，不把多列并排方程强行拼成一个式子。
+
+multline/split/matrix/cases/alignat及其他复杂环境尚未支持。
+有未知命令、异常括号、内部空步骤或不支持的结构时，整个父公式所有步骤标limited，
+保留原文和issues、禁用结构key；不静默只取其中好分析的行。受限步骤保持序列屏障。
+
+## 步骤位置契约
+
+步骤表保留与原解析单元兼容的字段，另有：
+- parent_unit_id、parent_raw：原公式单元标识与完整原文，方便复核环境和元数据。
+- unit_id：普通公式保持原ID；多行/环境步骤使用原ID:s001等唯一标识。
+- step_index、environment：父单元内的行序号及实际处理环境。
+- content/raw：去除环境包装与行分隔符后、保留对齐标记的连续原始行片段；两端ASCII空白被裁去。
+- content_start/end及行列：上述原始片段在doc$source中的连续范围。
+- comparison_content、comparison_positions：忽略受支持对齐/编号标记后的内容及各字符全局位置。
+- details：规范化token及映射、状态和issues；token位置已映射到全局源字符。
+
+doc$source和doc$units不修改；解析器原单元的raw重建契约保持不变。
+步骤表是派生结构，行分隔符、环境包装及空白不归入某个步骤的raw；
+不得用步骤raw拼接来重建整篇文档。
+别名token的源范围仍指向原命令，例如规范化frac指向原dfrac。
+源位置对应UTF-8/LF规范后的字符，不是磁盘字节。
+步骤行号范围也不作为覆盖率，未新增公式覆盖指标。
+
+运行Rscript tests/test-math-multiline.R和Rscript examples/run-math-multiline-demo.R。
+演示裸align与显示区域内aligned之间的三步匹配、一步插入及统一改名。

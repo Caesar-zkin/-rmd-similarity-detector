@@ -1,4 +1,4 @@
-# Requires parser.R and math.R. A step is one separately delimited math unit.
+# Requires parser.R and math.R. Steps include supported multiline rows.
 math_sequence_integer <- function(x, name, zero = FALSE) {
   if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
       x != floor(x) || x < (if (zero) 0 else 1) || x > .Machine$integer.max)
@@ -57,7 +57,10 @@ find_math_sequences <- function(doc_a, doc_b, min_steps = 2L, max_steps = 5L,
   na <- sum(doc_a$units$type == "math"); nb <- sum(doc_b$units$type == "math")
   if (max(na, nb) > max_formulas) stop("Formula unit limit exceeded.")
   if (as.double(na) * nb > max_pairs) stop("Formula pair limit exceeded.")
-  a <- prepare_math_units(doc_a); b <- prepare_math_units(doc_b)
+  a <- prepare_math_steps(doc_a, max_steps = max_formulas)
+  b <- prepare_math_steps(doc_b, max_steps = max_formulas)
+  na <- nrow(a); nb <- nrow(b)
+  if (as.double(na) * nb > max_pairs) stop("Expanded formula pair limit exceeded.")
   links_a <- .math_sequence_links(doc_a, a, max_source_gap)
   links_b <- .math_sequence_links(doc_b, b, max_source_gap)
   states <- 0; token_work <- 0; paths <- list()
@@ -110,6 +113,8 @@ find_math_sequences <- function(doc_a, doc_b, min_steps = 2L, max_steps = 5L,
   for (path in paths) {
     ia <- path$a; ib <- path$b
     pairs <- data.frame(unit_id_a = a$unit_id[ia], unit_id_b = b$unit_id[ib],
+      parent_unit_id_a = a$parent_unit_id[ia], parent_unit_id_b = b$parent_unit_id[ib],
+      step_index_a = a$step_index[ia], step_index_b = b$step_index[ib],
       content_a = a$content[ia], content_b = b$content[ib],
       start_line_a = a$start_line[ia], end_line_a = a$end_line[ia],
       start_line_b = b$start_line[ib], end_line_b = b$end_line[ib], stringsAsFactors = FALSE)
