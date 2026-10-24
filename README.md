@@ -72,3 +72,9 @@ doc$diagnostics
 
 仅支持当前窗口和种子范围内的文字编辑，不保证找到全部局部复制，不进行语义理解。
 输入较大超过上限会明确报错；参数未标定。
+
+## 正文排版演示
+
+支持有限的强调、删除线、引用/列表前缀和转义处理，保留原文字符映射；不是完整Markdown实现。
+运行 `Rscript examples/run-text-markdown-demo.R`，示例的规范化正文一致，Jaccard和覆盖率均为1。
+测试：`Rscript tests/test-text-markdown.R`。原文、公式和代码不会被此步骤修改。

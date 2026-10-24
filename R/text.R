@@ -49,13 +49,109 @@ normalize_text <- function(text) {
   )
 }
 
+# Identify removable Markdown characters without editing the source itself.
+# Conservative subset: paired emphasis/strike, line prefixes and ASCII escapes.
+markdown_drop_positions <- function(doc) {
+  u <- extract_text_units(doc)
+  chars <- strsplit(doc$source, "", fixed = TRUE)[[1L]]
+  n <- length(chars)
+  if (!n || !nrow(u)) return(integer())
+  eligible <- rep(FALSE, n)
+  for (i in seq_len(nrow(u))) {
+    if (u$content_start[i] <= u$content_end[i])
+      eligible[seq.int(u$content_start[i], u$content_end[i])] <- TRUE
+  }
+  drop <- rep(FALSE, n)
+  # Protected content occupies its original width, but cannot supply delimiters.
+  masked <- chars
+  masked[!eligible & chars != "\n"] <- "\ufffc"
+  escaped <- function(at) {
+    j <- at - 1L; count <- 0L
+    while (j >= 1L && chars[j] == "\\") { count <- count + 1L; j <- j - 1L }
+    count %% 2L == 1L
+  }
+  ascii_punctuation <- c("!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",",
+    "-", ".", "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~")
+  for (p in seq_len(n)) {
+    if (eligible[p] && chars[p] == "\\" && !escaped(p) && p < n &&
+        eligible[p + 1L] && chars[p + 1L] %in% ascii_punctuation)
+      drop[p] <- TRUE
+  }
+  # Recognise quote/list prefixes only at real source line starts.
+  starts <- c(1L, which(chars == "\n") + 1L)
+  for (li in seq_along(starts)) {
+    s <- starts[li]
+    e <- if (li < length(starts)) starts[li + 1L] - 2L else n
+    if (s > e) next
+    used <- 0L
+    repeat {
+      p <- s + used
+      if (p > e) break
+      line <- paste0(masked[seq.int(p, e)], collapse = "")
+      found <- regexpr("^ {0,3}(?:>[ \t]?|(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)", line, perl = TRUE)
+      if (found[1L] < 0L) break
+      width <- attr(found, "match.length")
+      ids <- seq.int(p, p + width - 1L)
+      if (!all(eligible[ids])) break
+      drop[ids] <- TRUE
+      used <- used + width
+    }
+  }
+  whitespace <- function(ch) ch %in% c(" ", "\t", "\n", "\r", "\f", "\v", "\u00a0", "\u3000")
+  word <- function(ch) grepl("^[\\p{L}\\p{N}]$", ch, perl = TRUE)
+  # Pair delimiters within the same paragraph context, including around protected
+  # inline math/code, but never use delimiters from inside that protected content.
+  for (indices in split(seq_len(nrow(u)), u$context_id)) {
+    valid <- indices[u$content_start[indices] <= u$content_end[indices]]
+    if (!length(valid)) next
+    lo <- min(u$content_start[valid]); hi <- max(u$content_end[valid])
+    stack <- list(); p <- lo
+    while (p <= hi) {
+      marker <- masked[p]
+      if (!eligible[p] || drop[p] || !marker %in% c("*", "_", "~")) {
+        p <- p + 1L; next
+      }
+      j <- p
+      while (j <= hi && masked[j] == marker) j <- j + 1L
+      width <- j - p
+      supported <- if (marker == "~") width == 2L else width %in% 1:3
+      if (!supported || escaped(p)) { p <- j; next }
+      key <- paste0(marker, width)
+      can_open <- j <= hi && !whitespace(masked[j])
+      can_close <- p > lo && !whitespace(masked[p - 1L])
+      if (marker == "_") {
+        if (p > lo && word(masked[p - 1L])) can_open <- FALSE
+        if (j <= hi && word(masked[j])) can_close <- FALSE
+      }
+      top <- length(stack)
+      if (can_close && top > 0L && identical(stack[[top]]$key, key)) {
+        opening <- stack[[top]]$positions
+        drop[c(opening, seq.int(p, j - 1L))] <- TRUE
+        stack <- stack[-top]
+      } else if (can_open) {
+        stack[[top + 1L]] <- list(key = key, positions = seq.int(p, j - 1L))
+      }
+      p <- j
+    }
+  }
+  which(drop)
+}
+
 # 提取并规范化正文，将字符位置映射回文档
 prepare_text_units <- function(doc) {
 
   units <- extract_text_units(doc)
 
-  # 分别处理每个正文单元
-  normalized <- lapply(units$content, normalize_text)
+  # 先排除已识别的排版标记，再去空白；始终保留原字符位置。
+  dropped <- markdown_drop_positions(doc)
+  normalized <- lapply(seq_len(nrow(units)), function(i) {
+    chars <- strsplit(units$content[i], "", fixed = TRUE)[[1L]]
+    positions <- as.integer(units$content_start[i] + seq_along(chars) - 1L)
+    keep <- !positions %in% dropped
+    result <- normalize_text(paste0(chars[keep], collapse = ""))
+    list(text = result$text,
+      source_positions = positions[keep][result$source_positions])
+  })
 
   # 每个单元对应一个规范化字符串
   units$normalized_text <- vapply(
@@ -64,13 +160,8 @@ prepare_text_units <- function(doc) {
     character(1)
   )
 
-  # 单元内位置转换为文档位置
-  positions <- lapply(seq_len(nrow(units)), function(i) {
-    as.integer(
-      units$content_start[i] +
-        normalized[[i]]$source_positions - 1L
-    )
-  })
+  # 此处已经是文档位置；不能再次添加content_start。
+  positions <- lapply(normalized, function(item) item$source_positions)
 
   # 每行保存长度可能不同的位置向量
   units$source_positions <- I(positions)

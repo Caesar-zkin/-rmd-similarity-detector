@@ -1,0 +1,11 @@
+source("R/parser.R", encoding = "UTF-8")
+source("R/text.R", encoding = "UTF-8")
+source("R/text-matches.R", encoding = "UTF-8")
+
+a <- parse_rmd_text("> **统 计** 与 *分析*", file_id = "A")
+b <- parse_rmd_text("统计与分析", file_id = "B")
+print(prepare_text_units(a)[, c("content", "normalized_text", "source_positions")])
+result <- analyze_text_pair(a, b, k = 2L, min_chars = 3L)
+print(result$jaccard)
+print(result$coverage)
+cat("Supported formatting only. No plagiarism verdict.\n")

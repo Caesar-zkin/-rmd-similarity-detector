@@ -44,3 +44,9 @@ jobs:
 
       - name: Run artificial edit demonstration
         run: Rscript examples/run-text-approx-demo.R
+
+      - name: Run Markdown normalization tests
+        run: Rscript tests/test-text-markdown.R
+
+      - name: Run Markdown normalization demonstration
+        run: Rscript examples/run-text-markdown-demo.R
