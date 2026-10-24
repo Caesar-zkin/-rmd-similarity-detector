@@ -1,26 +1,145 @@
-name: Parser tests
+name: Module tests
 
 on:
   push:
-    branches: [main, feat/parser]
+    branches:
+      - main
+      - 'feat/**'
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  parser:
+  modules:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: release
           use-public-rspm: false
-      - name: Run structural parser assertions
+
+      - name: Run parser tests
         run: Rscript tests/test-parser.R
+
+      - name: Run text tests
+        run: Rscript tests/test-text.R
+
+      - name: Run exact matching and coverage tests
+        run: Rscript tests/test-text-matches.R
+
+      - name: Run file-to-file text demo
+        run: Rscript examples/run-text-demo.R
+
+      - name: Run approximate matching tests
+        run: Rscript tests/test-text-approx.R
+
+      - name: Run artificial edit demonstration
+        run: Rscript examples/run-text-approx-demo.R
+
+      - name: Run Markdown normalization tests
+        run: Rscript tests/test-text-markdown.R
+
+      - name: Run Markdown normalization demonstration
+        run: Rscript examples/run-text-markdown-demo.R
+
+      - name: Run formula foundation tests
+        run: Rscript tests/test-math.R
+
+      - name: Run formula demonstration
+        run: Rscript examples/run-math-demo.R
+
+      - name: Run formula sequence tests
+        run: Rscript tests/test-math-sequences.R
+
+      - name: Run formula sequence demonstration
+        run: Rscript examples/run-math-sequence-demo.R
+
+      - name: Run multiline formula tests
+        run: Rscript tests/test-math-multiline.R
+
+      - name: Run multiline formula demonstration
+        run: Rscript examples/run-math-multiline-demo.R
+
+      - name: Run code foundation tests
+        run: Rscript tests/test-code.R
+
+      - name: Run code foundation demonstration
+        run: Rscript examples/run-code-demo.R
+
+      - name: Run code local matching tests
+        run: Rscript tests/test-code-local.R
+
+      - name: Run code local demonstration
+        run: Rscript examples/run-code-local-demo.R
+
+      - name: Check generated single-file detector
+        run: Rscript scripts/build-detector.R --check
+
+      - name: Run report integration tests
+        run: Rscript tests/test-report.R
+
+      - name: Run development validation pipeline tests
+        run: Rscript tests/test-validation.R
+
+      - name: Run registered development experiment
+        run: Rscript scripts/run-validation.R
+
+      - name: Run longer development material checks
+        run: Rscript tests/test-extended-validation.R
+
+      - name: Run independent intake contract tests with synthetic temporary data
+        run: Rscript tests/test-independent-validation.R
+
+      - name: Run boundary control tests
+        run: Rscript tests/test-boundary.R
+
+      - name: Run separate boundary observations
+        run: Rscript scripts/run-boundary.R
+
+      - name: Run explicit exclusion tests
+        run: Rscript tests/test-exclusions.R
+
+      - name: Run explicit exclusion demonstration
+        run: Rscript examples/run-exclusion-demo.R
+
+      - name: Run evidence consolidation tests
+        run: Rscript tests/test-evidence.R
+
+      - name: Run draft tri-state decision tests
+        run: Rscript tests/test-decision.R
+
+      - name: Run draft decision demonstration
+        run: Rscript examples/run-decision-demo.R
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::rmarkdown
+            any::sessioninfo
+          install-pandoc: true
+          install-quarto: false
+          cache-version: report-v1
+
+      - name: Run standalone report render tests
+        run: Rscript tests/test-render-report.R
+
+      - name: Render mixed demonstration with CLI
+        run: Rscript scripts/render-detector.R
+
+      - name: Render public-prompt exclusion with CLI
+        run: Rscript scripts/render-detector.R validation/boundary/fixtures/B03/a.Rmd validation/boundary/fixtures/B03/b.Rmd reports-local/prompt-excluded.html examples/prompt-exclusions.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-report-${{ matrix.os }}
+          path: reports-local/*.html
+          retention-days: 7

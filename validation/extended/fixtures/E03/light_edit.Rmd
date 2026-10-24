@@ -1,0 +1,22 @@
+---
+title: "E03 light_edit"
+output: html_document
+---
+
+# Analysis
+
+```{r}
+nums <- c(12, 15, 18, 20, 21, 23, 25, 26)
+count <- length(nums)
+average <- mean(nums)
+print(length(nums))
+offsets <- nums - average
+powers <- offsets ^ 2
+total <- sum(powers)
+spread <- total / (count - 1)
+scale <- sqrt(spread)
+uncertainty <- scale / sqrt(count)
+displayed <- round(average, 2)
+print(displayed)
+print(uncertainty)
+```

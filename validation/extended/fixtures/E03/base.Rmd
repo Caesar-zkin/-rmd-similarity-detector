@@ -1,0 +1,25 @@
+---
+title: "E03 source"
+output: html_document
+---
+
+# Analysis
+
+按固定数据依次计算均值、样本方差、标准差与均值标准误。
+
+```{r}
+values <- c(12, 15, 18, 20, 21, 23, 25, 26)
+size <- length(values)
+center <- mean(values)
+deviations <- values - center
+squares <- deviations ^ 2
+sum_squares <- sum(squares)
+sample_variance <- sum_squares / (size - 1)
+sample_sd <- sqrt(sample_variance)
+standard_error <- sample_sd / sqrt(size)
+rounded_center <- round(center, 2)
+print(rounded_center)
+print(standard_error)
+```
+
+此处的标准误解释以观测独立同分布且方差有限为前提。

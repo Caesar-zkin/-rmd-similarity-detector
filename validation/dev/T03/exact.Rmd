@@ -1,0 +1,11 @@
+---
+title: "Synthetic development fixture"
+---
+
+# 分析
+
+```{r}
+values <- c(1, 2, 3)
+center <- mean(values)
+print(center)
+```

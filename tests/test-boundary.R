@@ -1,0 +1,71 @@
+source("scripts/run-boundary.R", encoding = "UTF-8")
+checks <- 0L
+check <- function(ok, label) {
+  if (!isTRUE(ok)) stop("FAIL ", label)
+  checks <<- checks + 1L; cat("PASS", label, "\n")
+}
+fails <- function(fun) inherits(tryCatch(fun(), error = identity), "error")
+cases <- validate_boundary_manifest()
+check(nrow(cases) == 10L, "ten separately registered boundary controls")
+check(!any(cases$role %in% c("copied", "independent")), "roles do not pretend to be classification truth")
+check(file.info(boundary_input_path(".", cases$source_file[cases$case_id == "B01"]))$size == 0, "actual empty input file")
+check(file.exists(boundary_input_path(".", cases$source_file[cases$case_id == "B10"])), "Chinese and space fixture path")
+for (path in c("validation/boundary/fixtures/../../holdout-local/a.Rmd", "validation/dev/T01/base.Rmd",
+    "validation/independent-local/a.Rmd", "C:/private/a.Rmd", "validation/boundary/fixtures/B01/../a.Rmd"))
+  check(fails(function() boundary_input_path(".", path)), "reject other registries or traversal")
+
+tmp <- tempfile("boundary-tests-"); dir.create(tmp)
+dir.create(file.path(tmp, "validation")); dir.create(file.path(tmp, "validation/boundary"))
+file.copy("validation/boundary/fixtures", file.path(tmp, "validation/boundary"), recursive = TRUE)
+bad <- cases; bad$role[1L] <- "independent"
+utils::write.csv(bad, file.path(tmp, "validation/boundary/cases.csv"), row.names = FALSE, fileEncoding = "UTF-8")
+check(fails(function() validate_boundary_manifest(tmp)), "reject false independent labeling")
+bad <- cases; bad$case_id[2L] <- bad$case_id[1L]
+utils::write.csv(bad, file.path(tmp, "validation/boundary/cases.csv"), row.names = FALSE, fileEncoding = "UTF-8")
+check(fails(function() validate_boundary_manifest(tmp)), "duplicate boundary IDs rejected")
+bad <- cases; bad$target_file[1L] <- "validation/dev/T01/base.Rmd"
+utils::write.csv(bad, file.path(tmp, "validation/boundary/cases.csv"), row.names = FALSE, fileEncoding = "UTF-8")
+check(fails(function() validate_boundary_manifest(tmp)), "manifest cannot redirect to core development")
+
+experiment <- run_boundary_validation(output = file.path(tmp, "results"))
+rows <- experiment$results; d <- experiment$details
+get <- function(id) rows[rows$case_id == id, , drop = FALSE]
+check(nrow(rows) == 10L, "all boundary observations retained")
+check(all(rows$verdict == "not_enabled"), "no premature verdict for boundary controls")
+check(!any(rows$overall_status %in% c("input_error", "partial_failure")), "unsupported input is handled without module crashes")
+for (id in c("B01", "B02")) {
+  r <- get(id)
+  check(is.na(r$text_jaccard), paste(id, "empty text similarity is NA"))
+  check(is.na(r$text_coverage_a) && is.na(r$text_coverage_b), paste(id, "empty text coverage is NA"))
+  check(is.na(r$code_coverage_a) && is.na(r$code_coverage_b), paste(id, "empty code coverage is NA"))
+}
+shared <- get("B03")
+check(shared$text_matched_a >= 60 && shared$text_matched_b >= 60, "public prompt remains matching evidence")
+check(shared$risk_observation == "shared_prompt_is_matching_evidence", "public prompt risk is explicit")
+check(grepl("共同题干", detector_report_html(d$B03), fixed = TRUE), "report discloses common prompt limitation")
+check(get("B04")$formula_single_matches > 0, "routine formula is a single-formula match")
+check(get("B04")$formula_sequence_matches == 0, "one standard formula is not a multi-step sequence")
+check(get("B04")$risk_observation == "routine_formula_is_matching_evidence", "routine formula risk retained")
+check(get("B05")$code_whole_matches > 0, "routine code tokens match")
+check(get("B05")$code_local_matches == 0, "routine code stays below local length threshold")
+check(get("B05")$code_coverage_a == 0, "short supported code has zero qualified local coverage")
+check(get("B05")$risk_observation == "routine_code_is_matching_evidence", "routine code risk retained")
+check(get("B06")$text_jaccard == 0, "unrelated synthetic content has no shared ngrams")
+check(get("B06")$text_coverage_a == 0 && get("B06")$text_coverage_b == 0, "unrelated content has no qualified text match")
+check(get("B07")$code_local_status == "limited", "incomplete R syntax is limited")
+check(is.na(get("B07")$code_coverage_a), "unparsed R code is not reported as zero coverage")
+check(d$B07$modules$code_local$value$code_a$details[[1L]]$parse_status == "error", "parse error diagnostic retained")
+check(get("B08")$formula_single_status == "limited" && get("B08")$formula_sequence_status == "limited", "unknown LaTeX command is limited")
+check(get("B09")$code_local_status == "limited" && is.na(get("B09")$code_coverage_a), "non-R code has no R token denominator")
+check(d$B09$modules$code_local$value$code_a$details[[1L]]$parse_status == "unsupported", "non-R diagnostic retained")
+check(get("B10")$text_coverage_a == 1 && get("B10")$text_coverage_b < 0.1, "long document retains small local copied region")
+check(get("B10")$text_matched_a >= 60 && get("B10")$text_matched_b >= 60, "local match survives low full-document proportion")
+saved <- readRDS(file.path(tmp, "results/experiment.rds"))
+check(saved$group == "boundary_only", "separate experiment group")
+check(identical(saved$results, rows), "boundary snapshot round trip")
+check(all(!is.na(saved$hashes$md5)), "all boundary input and engine hashes recorded")
+check(!any(grepl("holdout-local|independent-local|validation/dev/", saved$hashes$path)), "core and private material not opened")
+check(file.exists(file.path(tmp, "results/results.csv")), "boundary CSV written")
+check(!any(c("accuracy", "false_positive_rate", "f1") %in% names(rows)), "no fabricated classification score")
+unlink(tmp, recursive = TRUE)
+cat("All", checks, "boundary assertions passed.\n")

@@ -1,0 +1,56 @@
+---
+title: "Rmd 作业相似性证据报告"
+output:
+  html_document:
+    self_contained: true
+    template: null
+    mathjax: null
+    theme: null
+    highlight: null
+    anchor_sections: false
+params:
+  input_a: "examples/report-a.Rmd"
+  input_b: "examples/report-b.Rmd"
+  exclusion_file: ""
+  max_evidence: 10
+  text_k: 5
+  text_min_chars: 30
+  text_min_similarity: 0.8
+  formula_min_steps: 2
+  formula_max_steps: 5
+  formula_max_skips: 1
+  code_min_tokens: 20
+  code_window_tokens: 100
+  code_max_skips: 1
+---
+
+<!-- Generated from R/ modules and this template. Edit sources, then rebuild. -->
+
+<style>
+body{font:16px/1.65 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#243247;background:#f6f8fb;margin:0 auto;padding:32px;max-width:1180px}h1,h2,h3{color:#17395b;line-height:1.35}h2{border-bottom:2px solid #d9e2ee;padding-bottom:10px;margin-top:40px}h4{margin:8px 0}.notice{padding:18px 22px;background:#fff4d9;border-left:5px solid #ba820d;border-radius:5px}.error{background:#fff0ef;border-color:#bb3b34}.muted{color:#64748b;font-size:.9em}.table-wrap{overflow-x:auto;margin:16px 0}table{border-collapse:collapse;width:100%;background:white;font-size:.9em}th,td{text-align:left;vertical-align:top;padding:10px 12px;border:1px solid #dce3ec;overflow-wrap:anywhere}th{background:#edf3fa}pre{background:#f0f4f9;border:1px solid #dce3ec;border-radius:5px;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 Consolas,monospace}.evidence{background:white;border:1px solid #dce3ec;border-radius:7px;padding:18px;margin:20px 0}.evidence-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}@media(max-width:760px){body{padding:16px}.evidence-pair{grid-template-columns:1fr}}
+</style>
+
+``````{r detector-engine, include=FALSE}
+@@DETECTOR_MODULES@@
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+``````
+
+``````{r evidence-report, results='asis', echo=FALSE}
+report_result <- analyze_rmd_pair(
+  params$input_a, params$input_b,
+  text_options = list(k = params$text_k, min_chars = params$text_min_chars,
+    min_similarity = params$text_min_similarity),
+  formula_options = list(min_steps = params$formula_min_steps,
+    max_steps = params$formula_max_steps, max_skips = params$formula_max_skips),
+  code_options = list(min_tokens = params$code_min_tokens,
+    window_tokens = params$code_window_tokens, max_skips = params$code_max_skips),
+  exclusions = if (nzchar(params$exclusion_file)) params$exclusion_file else NULL
+)
+# 明确作为原始 HTML 输出，避免再次按 Markdown 解析
+cat(
+  "\n```{=html}\n",
+  detector_report_html(report_result, params$max_evidence),
+  "\n```\n",
+  sep = ""
+)
+``````

@@ -1,0 +1,7 @@
+"task_id","split","kind","description"
+"T01","dev","text","描述统计解释"
+"T02","dev","math","等式传递推导"
+"T03","dev","mixed","固定数据与均值输出（先收代码基础样例）"
+"T04","dev","math","样本均值公式及实现说明"
+"T05","holdout","text","保留文字任务：材料尚未准备"
+"T06","holdout","mixed","保留综合任务：材料尚未准备"

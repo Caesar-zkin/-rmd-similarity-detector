@@ -1,0 +1,12 @@
+---
+title: "Synthetic modified development fixture"
+---
+
+# 说明
+
+```{r}
+nums <- c(1, 2, 3)
+extra <- 0
+avg <- mean(nums)
+print(avg)
+```

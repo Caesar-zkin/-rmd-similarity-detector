@@ -1,0 +1,19 @@
+---
+title: "Synthetic modified development fixture"
+---
+
+# 说明
+
+本段为项目构造的额外内容，只用于检验匹配区域边界，不属于独立作答样本。
+
+# 引用部分
+
+本例先构造固定的观测序列，再计算样本均值，最后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺
+
+```{r}
+extra <- 0
+values <- c(2, 4, 6)
+center <- mean(values)
+print(center)
+other <- 9
+```

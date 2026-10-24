@@ -1,0 +1,24 @@
+---
+title: "自建综合示例 A"
+output: html_document
+---
+
+# 文字说明
+
+本次分析先检查数据的缺失情况，再计算样本均值和离散程度，最后结合图形讨论结果。所有计算都应保留原始记录，便于复核每一步的处理过程。
+
+# 公式推导
+
+\begin{align}
+x &= y \\
+y &= z \\
+z &= 1
+\end{align}
+
+# R 代码
+
+```{r}
+values <- c(1, 2, 3)
+center <- mean(values)
+print(center)
+```

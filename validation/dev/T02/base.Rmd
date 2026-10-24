@@ -1,0 +1,13 @@
+---
+title: "Synthetic development fixture"
+---
+
+# 分析
+
+$$
+\begin{aligned}
+x &= y \\
+y &= z \\
+z &= 1
+\end{aligned}
+$$

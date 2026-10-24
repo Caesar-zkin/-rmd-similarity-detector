@@ -1,0 +1,12 @@
+---
+title: "E01 local"
+output: html_document
+---
+
+# Analysis
+
+The preceding section discusses a separate measurement protocol and does not reuse the source answer.
+
+描述中心位置时，我同时查看算术平均数和中位数，并结合四分位数了解数据分布。平均数利用全部观测，但容易受到少数大值影响；中位数对这种影响较稳健，却不能反映所有数值的大小变化。两者差异较大时，我会进一步检查分布是否偏斜，而不会只挑选一个看起来更好看的统计量来概括全部数据。
+
+The remaining calculations are omitted here. This excerpt is deliberately a partial reuse of the source discussion.

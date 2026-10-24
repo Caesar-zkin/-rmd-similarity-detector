@@ -1,0 +1,14 @@
+---
+title: "Synthetic modified development fixture"
+---
+
+# 说明
+
+$$
+\begin{aligned}
+a &= b \\
+t &= 2 \\
+b &= c \\
+c &= 1
+\end{aligned}
+$$

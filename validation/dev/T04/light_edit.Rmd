@@ -1,0 +1,16 @@
+---
+title: "Synthetic modified development fixture"
+---
+
+# 说明
+
+本例先构造固定的观测序列，再计算样本均值，随后打印计算结果。代码仅用于说明分析步骤；比较两个作业时需要保留操作顺序及常数，不能仅根据变量名称是否相同得出结论。
+
+$\bar{y}=\frac{1}{n}\sum_{i=1}^{n}y_i$
+
+```{r}
+nums <- c(2, 4, 6)
+extra <- 0
+avg <- mean(nums)
+print(avg)
+```
