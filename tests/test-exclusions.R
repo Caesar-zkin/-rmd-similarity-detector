@@ -58,6 +58,24 @@ check(fails(function() prepare_document_exclusions(docs, "__missing_exclusion__.
 check(fails(function() prepare_document_exclusions(docs, records[rep(1L, 1001L), ])), "exclusion record resource limit")
 
 tmp <- tempfile("exclusions-"); dir.create(tmp)
+reference <- file.path(tmp, "共同模板.Rmd")
+ra <- file.path(tmp, "reference-a.Rmd"); rb <- file.path(tmp, "reference-b.Rmd")
+writeLines(c("Follow the supplied instructions.", "", "```{r}", "set.seed(12)", "```"), reference)
+writeLines(c("**Follow the supplied instructions.**", "", "Unique answer from A.", "", "```{r}", "set.seed( 12 )", "```"), ra)
+writeLines(c("Follow the supplied instructions.", "", "Different answer from B.", "", "```{r}", "set.seed(12)", "```"), rb)
+reference_result <- analyze_rmd_pair(ra, rb, public_reference = reference)
+check(reference_result$exclusions$status == "applied" &&
+  nrow(reference_result$exclusions$units) == 4L, "reference excludes formatted prompt and starter code on both sides")
+check(all(reference_result$modules$text$value$coverage$matched_chars == 0L) &&
+  all(reference_result$modules$text$value$coverage_with_short$coverage == 0) &&
+  all(reference_result$modules$text$value$coverage$comparable_chars > 0),
+  "reference removes shared prompt from evidence and retains distinct answer text")
+check(grepl("共同模板.Rmd", detector_report_html(reference_result), fixed = TRUE),
+  "reference name is retained for audit")
+unmatched_reference <- analyze_rmd_pair(pa, pb, public_reference = reference)
+check(unmatched_reference$exclusions$status == "no_matches" &&
+  identical(unmatched_reference$modules$text$value$coverage, before$modules$text$value$coverage),
+  "reference with no matching units preserves original comparison")
 csv <- file.path(tmp, "排除 标注.csv")
 utils::write.csv(records, csv, row.names = FALSE, fileEncoding = "UTF-8")
 from_csv <- analyze_rmd_pair(pa, pb, exclusions = csv)

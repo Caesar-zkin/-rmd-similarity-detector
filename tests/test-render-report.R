@@ -1,5 +1,7 @@
 if (!requireNamespace("rmarkdown", quietly = TRUE) || !rmarkdown::pandoc_available())
   stop("Install rmarkdown and Pandoc before running render integration tests.")
+if (!requireNamespace("shiny", quietly = TRUE))
+  stop("Install shiny before running interactive report integration tests.")
 count <- 0L
 check <- function(ok, label) {
   if (!isTRUE(ok)) stop(label)
@@ -7,10 +9,42 @@ check <- function(ok, label) {
 }
 temp <- tempfile("rmd-standalone-report-"); dir.create(temp)
 file.copy("detector.Rmd", file.path(temp, "detector.Rmd"))
+check(identical(rmarkdown::yaml_front_matter(file.path(temp, "detector.Rmd"))$runtime, "shiny"),
+  "main document opens as a Shiny app in RStudio")
 pa <- file.path(temp, "示例 A.Rmd"); pb <- file.path(temp, "示例 B.Rmd")
 file.copy("examples/report-a.Rmd", pa); file.copy("examples/report-b.Rmd", pb)
+prompt_a <- "validation/boundary/fixtures/B03/a.Rmd"
+prompt_b <- "validation/boundary/fixtures/B03/b.Rmd"
+prompt <- file.path(temp, "共同题干.Rmd")
+writeLines(enc2utf8(readLines(prompt_a, encoding = "UTF-8")[3L]), prompt, useBytes = TRUE)
+shiny::testServer(function(input, output, session) {
+  app_path <- rmarkdown::render(file.path(temp, "detector.Rmd"), runtime = "shiny",
+    output_file = "app.html", output_dir = temp, envir = environment(), quiet = TRUE)
+  app_html <- paste(readLines(app_path, encoding = "UTF-8", warn = FALSE), collapse = "\n")
+  check(all(vapply(c('id="assignment_a"', 'id="assignment_b"', 'id="public_reference"', 'id="analyze"', 'id="analysis_result"'),
+    grepl, logical(1), x = app_html, fixed = TRUE)), "interactive document renders both file inputs and an inline result")
+  check(!grepl("class='detector-report'", app_html, fixed = TRUE), "interactive document waits for submitted files")
+  check(!grepl("rmd_empty_units", app_html, fixed = TRUE), "interactive page hides the bundled engine")
+}, {
+  upload <- function(path, name = basename(path)) {
+    data.frame(name = name, size = file.info(path)$size, type = "text/plain", datapath = path)
+  }
+  session$setInputs(assignment_a = upload(pa), assignment_b = upload(pb), analyze = 1L)
+  check(all(vapply(c(basename(pa), basename(pb), "分析结果速览"), grepl, logical(1),
+    x = output$analysis_result$html, fixed = TRUE)), "submitted files produce a report with their original names")
+  session$setInputs(assignment_b = upload(pb, "replacement.Rmd"))
+  message <- tryCatch(output$analysis_result, error = conditionMessage)
+  check(is.character(message) && grepl("文件已更换", message, fixed = TRUE), "replacing a file invalidates the previous report")
+  session$setInputs(analyze = 2L)
+  check(grepl("replacement.Rmd", output$analysis_result$html, fixed = TRUE), "submitting the replacement updates the inline report")
+  session$setInputs(assignment_a = upload(prompt_a), assignment_b = upload(prompt_b),
+    public_reference = upload(prompt), analyze = 3L)
+  check(grepl("已按公共参考排除 2 个完整单元", output$analysis_result$html, fixed = TRUE) &&
+    grepl("共同题干.Rmd", output$analysis_result$html, fixed = TRUE),
+    "optional reference excludes the shared prompt in the interactive report")
+})
 render <- function(a, b, output, exclusions = "") {
-  path <- rmarkdown::render(file.path(temp, "detector.Rmd"), output_file = output, output_dir = temp,
+  path <- rmarkdown::render(file.path(temp, "detector.Rmd"), runtime = "static", output_file = output, output_dir = temp,
     params = list(input_a = normalizePath(a, winslash = "/"), input_b = normalizePath(b, winslash = "/"),
       exclusion_file = if (nzchar(exclusions)) normalizePath(exclusions, winslash = "/") else ""),
     envir = new.env(parent = globalenv()), quiet = TRUE)

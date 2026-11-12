@@ -109,4 +109,30 @@ for (bad in list(-0.1, 1.1, NA_real_, Inf, "0.8"))
   fails(find_approximate_text_matches(a, b, min_similarity = bad), "invalid similarity threshold")
 fails(align_text_local(NA_character_, "甲"), "invalid alignment text")
 
+long_text <- intToUtf8(seq.int(0x4e00, length.out = 6500L))
+long_a <- doc(long_text, "A"); long_b <- doc(long_text, "B")
+fails(find_approximate_text_matches(long_a, long_b), "long identical text exceeds the default alignment budget")
+long_result <- analyze_text_pair_approx(long_a, long_b)
+check(long_result$status == "limited" && long_result$approximate_status == "resource_limit" &&
+  nzchar(long_result$approximate_error), "long identical text reports the near-match resource limit")
+check(identical(long_result$exact_matches$matched_chars, 6500L) &&
+  identical(long_result$exact_matches$source_positions_a[[1L]], seq_len(6500L)) &&
+  identical(long_result$exact_matches$source_positions_b[[1L]], seq_len(6500L)),
+  "near-match resource limit retains the entire exact match and both source maps")
+check(all(long_result$coverage$coverage == 1) && nrow(long_result$approximate_matches) == 0L &&
+  is.na(long_result$candidate_count) && is.na(long_result$alignment_cells),
+  "limited coverage counts completed exact evidence and leaves unreported work unknown")
+fails(analyze_text_pair_approx(long_a, long_b, max_windows = 0L), "invalid options still fail combined analysis")
+
+short_insert_a <- doc("观测数据已经整理完毕并核对完毕")
+short_insert_b <- doc("观测数据均已经整理完毕并核对完毕")
+short_insert <- find_short_text_matches(short_insert_a, short_insert_b, 30L)$matches
+check(nrow(short_insert) == 1L && short_insert$equal_chars == nchar(short_insert_a$source) &&
+  identical(substring(short_insert_a$source, short_insert$source_positions_a[[1L]], short_insert$source_positions_a[[1L]]),
+    substring(short_insert_b$source, short_insert$source_positions_b[[1L]], short_insert$source_positions_b[[1L]])),
+  "short insertion counts only equal Unicode characters and maps both sources")
+repeated_short <- doc("Observed values.\n\nObserved values.")
+check(nrow(find_short_text_matches(repeated_short, doc("Observed values."), 30L)$matches) == 0L,
+  "repeated short passages are not used for supplemental coverage")
+
 cat(sprintf("All %d approximate-match assertions passed.\n", checks))

@@ -273,7 +273,7 @@ parse_rmd_text <- function(text, file_id = "document") {
       code_units = sum(u$type %in% c("code", "inline_r")))), class = "rmd_document")
 }
 
-read_rmd <- function(path, file_id = basename(path), encoding = "UTF-8") {
+read_rmd <- function(path, file_id = basename(path), encoding = "UTF-8", keep_bytes = FALSE) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path))
     stop("path must be one non-empty local file path.")
   if (!file.exists(path) || dir.exists(path)) stop("Input file does not exist or is a directory: ", path)
@@ -286,5 +286,6 @@ read_rmd <- function(path, file_id = basename(path), encoding = "UTF-8") {
   if (is.na(text)) stop("Input cannot be decoded with encoding=", encoding, "; specify the correct encoding.")
   result <- parse_rmd_text(text, file_id)
   result$encoding <- encoding
+  if (keep_bytes) result$input_bytes <- bytes
   result
 }

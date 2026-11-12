@@ -184,8 +184,9 @@ exact_coverage保留精确匹配的覆盖；coverage为两种证据合并后的�
 ## 近似算法的运行上限与边界
 
 默认每侧max_windows=2000、max_candidates=500、max_seed_pairs=100000、
-每对max_cells=250000、总max_total_cells=5000000。超过任何上限明确报错，不静默截断或报告无匹配。
-精确分支仍受max_pairs约束。所有上限均为资源管理参数，不是判定阈值。
+每对max_cells=250000、总max_total_cells=5000000。超过上限时，近似接口报错。
+组合接口标记 `status = "limited"` 和 `approximate_status = "resource_limit"`，在 `approximate_error` 保留原因。覆盖率只统计已完成的精确匹配，近似候选数和对齐格数记为 `NA`。
+精确分支超过max_pairs仍报错。所有上限用于管理计算资源。
 
 无共享种子时不运行对齐，所以密集改写、短片段可能漏检。
 窗口边界会限制可见范围；一对窗口仅取一个最佳对齐，不能保证枚举全部局部复制。

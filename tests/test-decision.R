@@ -123,7 +123,7 @@ check(real$decision$trigger_records$record_id %in% real$evidence$value$records$r
 check(identical(evaluate_candidate_decision(real), real$decision), "draft decision deterministic")
 html <- detector_report_html(real)
 check(grepl("开发规则试判（未标定）", html, fixed = TRUE) && grepl("疑似抄袭", html, fixed = TRUE), "draft verdict displayed with calibration status")
-check(grepl("正式判定仍未启用", html, fixed = TRUE), "report separates draft and final status")
+check(grepl("未启用最终判定", html, fixed = TRUE), "report separates draft and final status")
 unrelated <- analyze_rmd_pair("validation/boundary/fixtures/B06/a.Rmd", "validation/boundary/fixtures/B06/b.Rmd")
 check(unrelated$decision$verdict == "no_clear_evidence", "real unrelated supported text produces draft no-clear-evidence")
 short <- analyze_rmd_pair("validation/boundary/fixtures/B05/a.Rmd", "validation/boundary/fixtures/B05/b.Rmd")

@@ -11,24 +11,22 @@
 
 ## 环境准备
 
-提前安装 R、rmarkdown 和 Pandoc。
+提前安装 R、rmarkdown 和 Pandoc。交互页面还需要 shiny。
 使用 RStudio 时，可使用其自带的 Pandoc。
 检测期间不自动安装依赖，不需要 LaTeX。
 
-## 运行方式
+## 在页面中比较
 
-将两份待比较作业命名为 A.Rmd、B.Rmd，
-与 detector.Rmd 放在同一目录。
+在 RStudio 打开 detector.Rmd，点击 **Run Document**。在页面中选择两份 UTF-8 编码的 Rmd，点击 **开始分析**，即可在同一页查看候选结论和证据。交互页面由本机 R 会话提供。
 
-在 RStudio 中打开 detector.Rmd，
-将顶部参数改为：
+## 导出静态 HTML
 
-```yaml
-  input_a: "A.Rmd"
-  input_b: "B.Rmd"
+在 R 控制台指定输入文件并编译。路径相对于 detector.Rmd 所在目录，也可使用绝对路径。
+
+```r
+rmarkdown::render("detector.Rmd", runtime = "static",
+  params = list(input_a = "A.Rmd", input_b = "B.Rmd"))
 ```
-
-保留其他参数，然后点击 Knit，生成 HTML 报告。
 
 程序只编译 detector.Rmd。
 待检测作业只作为文本读取，其中的代码不会执行。

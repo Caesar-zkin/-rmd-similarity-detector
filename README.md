@@ -76,7 +76,7 @@ doc$diagnostics
 测试：`Rscript tests/test-text-approx.R`。
 
 仅支持当前窗口和种子范围内的文字编辑，不保证找到全部局部复制，不进行语义理解。
-输入较大超过上限会明确报错；参数未标定。
+近似匹配超出计算上限时，报告标记分析受限，并保留精确匹配和相应覆盖率。参数未标定。
 
 ## 正文排版演示
 
@@ -120,11 +120,25 @@ prepare_math_steps保留每行与原公式单元的关系，支持有限align/al
 分别报告原词法覆盖与包含改名的结构对应覆盖，不解释为抄袭概率。
 不切入单条表达式或函数/循环内部做局部匹配，不支持任意token修改；参数未标定。
 
-## 生成完整证据报告
+## 在本地页面比较作业
+
+Windows 可双击 `dist/RmdDetector.exe`。启动器内嵌 `detector.Rmd`，使用本机的 R、`rmarkdown`、`shiny` 和 Pandoc。使用期间保留启动窗口。
+
+修改主文档后，先运行 `Rscript scripts/build-detector.R`，再从 PowerShell 运行 `& ./scripts/build-launcher.ps1` 更新 EXE。
+
+提前安装 R、`rmarkdown`、`shiny` 和 Pandoc。在 RStudio 打开 `detector.Rmd`，点击 **Run Document**。也可以从项目目录在 R 控制台运行：
+
+```r
+rmarkdown::run("detector.Rmd", shiny_args = list(host = "127.0.0.1"))
+```
+
+页面打开后选择两份 UTF-8 编码的 `.Rmd` 作业，点击 **开始分析**。候选结论、相似片段和原文行号会显示在当前页面。R 会话需保持运行，文件由本地 Shiny 服务读取。
+
+## 生成静态证据报告
 
 环境需预装rmarkdown及Pandoc。运行 `Rscript scripts/render-detector.R`，默认使用两份综合示例，输出 `reports-local/detector-report.html`。
 指定作业：`Rscript scripts/render-detector.R A.Rmd B.Rmd reports-local/my-report.html`。
-也可直接修改detector.Rmd顶部输入参数后Knit。报告明确显示未启用最终判定，不输出抄袭概率。
+在 R 中可用 `rmarkdown::render("detector.Rmd", runtime = "static")` 静态编译。报告明确显示未启用最终判定，不输出抄袭概率。
 
 开发维护：修改R/或模板后运行 `Rscript scripts/build-detector.R`，CI用 `--check`验证生成文件未过期。
 测试：`Rscript tests/test-report.R`；真实单文件编译测试：`Rscript tests/test-render-report.R`。

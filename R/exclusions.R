@@ -64,7 +64,12 @@ prepare_document_exclusions <- function(documents, exclusions) {
     log[[i]] <- data.frame(record = i, side = row$side, unit_id = u$unit_id[hit],
       original_type = u$type[hit], original_status = u$status[hit], start_line = u$start_line[hit], end_line = u$end_line[hit], stringsAsFactors = FALSE)
   }
-  # Validate every record before creating either analysis view. Source/offsets stay intact.
+  # Validate every record before creating either analysis view.
+  .apply_excluded_units(documents, selected, records, do.call(rbind, log))
+}
+
+.apply_excluded_units <- function(documents, selected, records, log) {
+  # Source/offsets stay intact for reports and sequence boundaries.
   views <- documents
   for (side in c("A", "B")) {
     ids <- unique(selected[[side]])
@@ -76,5 +81,45 @@ prepare_document_exclusions <- function(documents, exclusions) {
     views[[side]]$summary$code_units <- sum(views[[side]]$units$type %in% c("code", "inline_r"))
     views[[side]]$summary$limited_units <- sum(views[[side]]$units$status == "limited")
   }
-  list(status = "applied", error = "", records = records, units = do.call(rbind, log), documents = views)
+  list(status = "applied", error = "", records = records, units = log, documents = views)
+}
+
+prepare_reference_exclusions <- function(documents, path) {
+  keys <- function(doc) {
+    text <- prepare_text_units(doc)
+    math <- prepare_math_units(doc)
+    code <- prepare_code_units(doc)
+    table <- function(units, key, kind) {
+      ok <- units$status == "ok" & !is.na(key) & nzchar(key)
+      data.frame(id = units$unit_id[ok], key = paste0(kind, ":", key[ok], recycle0 = TRUE))
+    }
+    rbind(table(text, text$normalized_text, "text"),
+      table(math, vapply(math$details, function(x) if (x$status == "ok") x$normalized_key else NA_character_,
+        character(1)), "math"),
+      table(code, vapply(code$details, function(x) if (x$parse_status == "ok") x$normalized_key else NA_character_,
+        character(1)), "code"))
+  }
+  reference <- read_rmd(path, file_id = "reference")
+  reference_keys <- unique(keys(reference)$key)
+  selected <- lapply(documents, function(doc) {
+    candidates <- keys(doc)
+    which(doc$units$unit_id %in% candidates$id[candidates$key %in% reference_keys])
+  })
+  reference_name <- basename(path)
+  if (!sum(lengths(selected))) return(list(status = "no_matches", error = "",
+    records = exclusion_empty_records(), units = data.frame(), documents = documents, reference_name = reference_name))
+  records <- list(); log <- list(); offset <- 0L
+  for (side in names(documents)) {
+    u <- documents[[side]]$units[selected[[side]], , drop = FALSE]
+    if (!nrow(u)) next
+    log[[side]] <- data.frame(record = offset + seq_len(nrow(u)),
+      side = side, unit_id = u$unit_id, original_type = u$type, original_status = u$status,
+      start_line = u$start_line, end_line = u$end_line, stringsAsFactors = FALSE)
+    records[[side]] <- data.frame(side = side, start_line = u$start_line, end_line = u$end_line,
+      quote = u$raw, reason = "与公共参考的完整单元一致", reference = reference_name, stringsAsFactors = FALSE)
+    offset <- offset + nrow(u)
+  }
+  result <- .apply_excluded_units(documents, selected, do.call(rbind, records), do.call(rbind, log))
+  result$reference_name <- reference_name
+  result
 }
