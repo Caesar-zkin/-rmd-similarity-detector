@@ -213,6 +213,30 @@ select_code_candidates <- function(statements_a, statements_b, windows_a, window
     status = if (length(comparable)) "ok" else "insufficient_tokens", stringsAsFactors = FALSE)
 }
 
+supplement_short_code_coverage <- function(local, whole, records) {
+  if (is.null(local) || is.null(whole) || is.null(records))
+    return(list(coverage = local$coverage, added = 0L))
+  short <- records[records$module == "code_whole" & records$eligible &
+    records$matched_units >= 3L & records$matched_units < local$parameters$min_tokens, , drop = FALSE]
+  pairs <- whole$matches[short$source_row, , drop = FALSE]
+  lexical <- pairs$tokens_equal
+  preferred <- lexical | (!pairs$unit_id_a %in% pairs$unit_id_a[lexical] &
+    !pairs$unit_id_b %in% pairs$unit_id_b[lexical])
+  pairs <- pairs[preferred, , drop = FALSE]
+  short <- short[preferred, , drop = FALSE]
+  unique_pair <- function(ids) !duplicated(ids) & !duplicated(ids, fromLast = TRUE)
+  short <- short[unique_pair(pairs$unit_id_a) & unique_pair(pairs$unit_id_b), , drop = FALSE]
+  coverage <- local$coverage
+  for (i in seq_len(nrow(coverage))) {
+    side <- tolower(coverage$side[i])
+    positions <- c(local$matches[[paste0("token_starts_", side)]], short[[paste0("positions_", side)]])
+    coverage$matched_tokens[i] <- length(unique(unlist(positions, use.names = FALSE)))
+  }
+  have_tokens <- coverage$comparable_tokens > 0L
+  coverage$coverage[have_tokens] <- coverage$matched_tokens[have_tokens] / coverage$comparable_tokens[have_tokens]
+  list(coverage = coverage, added = nrow(short))
+}
+
 analyze_code_pair_local <- function(doc_a, doc_b, window_tokens = 100L, window_statements = 20L,
     min_tokens = 20L, min_statements = 1L, max_skips = 1L, max_statements = 2000L,
     max_windows = 500L, max_candidates = 500L, max_seed_pairs = 100000L,

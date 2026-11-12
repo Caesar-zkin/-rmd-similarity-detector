@@ -124,6 +124,7 @@ jobs:
         with:
           packages: |
             any::rmarkdown
+            any::shiny
             any::sessioninfo
           install-pandoc: true
           install-quarto: false

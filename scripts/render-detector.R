@@ -36,7 +36,7 @@ if (!file.copy(file.path(root, "detector.Rmd"), trusted_input)) {
   stop("Could not prepare the trusted detector copy.")
 }
 env <- new.env(parent = globalenv())
-result <- tryCatch(rmarkdown::render(trusted_input, output_file = basename(output),
+result <- tryCatch(rmarkdown::render(trusted_input, runtime = "static", output_file = basename(output),
   output_dir = dirname(output), params = list(input_a = input_a, input_b = input_b, exclusion_file = exclusion_file),
   envir = env, quiet = TRUE), finally = unlink(temp, recursive = TRUE))
 cat("Report written:", result, "\n")

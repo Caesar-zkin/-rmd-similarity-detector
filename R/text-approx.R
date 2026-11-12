@@ -1,6 +1,10 @@
 # Seed/window candidates and local alignment. Base R, no network or evaluation.
 # Load parser.R, text.R and text-matches.R first.
 
+.text_approximation_limit <- function(message) {
+  stop(errorCondition(message, class = "text_approximation_limit"))
+}
+
 text_positive_integer <- function(x, name) {
   if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
       x < 1 || x != floor(x) || x > .Machine$integer.max)
@@ -22,7 +26,7 @@ make_text_windows <- function(doc, window_size = 200L, max_windows = 2000L) {
     last <- max(1L, n - size + 1L)
     starts <- unique(c(seq.int(1L, last, by = step), last))
     if (length(rows) + length(starts) > limit)
-      stop("Window count exceeds max_windows; no partial result produced.")
+      .text_approximation_limit("Window count exceeds max_windows; no partial result produced.")
     for (s in starts) {
       e <- min(n, s + size - 1L)
       row <- data.frame(window_id = sprintf("w%05d", length(rows) + 1L),
@@ -55,14 +59,14 @@ select_text_candidates <- function(windows_a, windows_b, seed_k = 3L,
   common <- intersect(names(ca), names(cb))
   seed_pairs <- sum(as.double(ca[common]) * as.double(cb[common]))
   if (seed_pairs > seed_limit)
-    stop("Shared-seed combinations exceed max_seed_pairs; no partial result produced.")
+    .text_approximation_limit("Shared-seed combinations exceed max_seed_pairs; no partial result produced.")
   if (!seed_pairs) return(data.frame(window_a = integer(), window_b = integer(), shared_seeds = integer()))
   hits <- merge(a, b, by = "gram", suffixes = c("_a", "_b"), sort = FALSE)
   pairs <- aggregate(rep.int(1L, nrow(hits)),
     by = list(window_a = hits$window_a, window_b = hits$window_b), FUN = sum)
   names(pairs)[3L] <- "shared_seeds"
   if (nrow(pairs) > limit)
-    stop("Candidate count exceeds max_candidates; no partial result produced.")
+    .text_approximation_limit("Candidate count exceeds max_candidates; no partial result produced.")
   pairs <- pairs[order(-pairs$shared_seeds, pairs$window_a, pairs$window_b), , drop = FALSE]
   rownames(pairs) <- NULL
   pairs
@@ -155,7 +159,7 @@ find_approximate_text_matches <- function(doc_a, doc_b, seed_k = 3L,
   sizes <- (nchar(wa$text[candidates$window_a]) + 1) *
     (nchar(wb$text[candidates$window_b]) + 1)
   if (any(sizes > cells_limit) || sum(sizes) > total_limit)
-    stop("Alignment work exceeds max_cells or max_total_cells; no partial result produced.")
+    .text_approximation_limit("Alignment work exceeds max_cells or max_total_cells; no partial result produced.")
   lines <- function(text) c(1L, which(strsplit(text, "", fixed = TRUE)[[1L]] == "\n") + 1L)
   la <- lines(doc_a$source); lb <- lines(doc_b$source); rows <- list()
   for (i in seq_len(nrow(candidates))) {
@@ -203,28 +207,88 @@ find_approximate_text_matches <- function(doc_a, doc_b, seed_k = 3L,
     alignment_cells = sum(sizes))
 }
 
+find_short_text_matches <- function(doc_a, doc_b, min_chars, max_pairs = 10000L) {
+  # Use complete units and require a unique counterpart on both sides.
+  units_a <- prepare_text_units(doc_a); units_b <- prepare_text_units(doc_b)
+  repeated <- c(units_a$normalized_text[duplicated(units_a$normalized_text)],
+    units_b$normalized_text[duplicated(units_b$normalized_text)])
+  short_units <- function(units) {
+    x <- units$normalized_text
+    keep <- nchar(x) >= 8L & nchar(x) <= min(min_chars + 4, 60L) &
+      grepl("[[:alnum:]]", x) & !x %in% repeated
+    units[keep, , drop = FALSE]
+  }
+  a <- short_units(units_a); b <- short_units(units_b)
+  x <- a$normalized_text; y <- b$normalized_text
+  na <- nchar(x); nb <- nchar(y)
+  exact <- match(x, y)
+  ia <- which(!is.na(exact) & na < min_chars)
+  ib <- exact[ia]
+  xa <- which(is.na(exact) & na >= 12L)
+  yb <- which(!y %in% x & nb >= 12L)
+  limited <- as.double(length(xa)) * length(yb) > max_pairs
+  if (!limited && length(xa) && length(yb)) {
+    distance <- utils::adist(x[xa], y[yb])
+    lengths <- outer(na[xa], nb[yb], pmax)
+    short_enough <- outer(na[xa], nb[yb], pmin) < min_chars
+    candidates <- short_enough & distance <= pmax(1L, floor(.15 * lengths))
+    pair <- which(candidates & rowSums(candidates) == 1L &
+      rep(colSums(candidates) == 1L, each = nrow(candidates)), arr.ind = TRUE)
+    ia <- c(ia, xa[pair[, 1L]]); ib <- c(ib, yb[pair[, 2L]])
+  }
+  matches <- data.frame(start_line_a = a$start_line[ia], end_line_a = a$end_line[ia],
+    start_line_b = b$start_line[ib], end_line_b = b$end_line[ib],
+    equal_chars = integer(length(ia)), similarity = numeric(length(ia)),
+    text_a = a$content[ia], text_b = b$content[ib])
+  positions_a <- positions_b <- vector("list", length(ia))
+  for (i in seq_along(ia)) {
+    j <- ia[i]; k <- ib[i]
+    transform <- if (x[j] == y[k]) strrep("M", na[j]) else
+      attr(utils::adist(x[j], y[k], counts = TRUE), "trafos")[1L, 1L]
+    operations <- strsplit(transform, "", fixed = TRUE)[[1L]]
+    equal <- operations == "M"
+    positions_a[[i]] <- a$source_positions[[j]][cumsum(operations != "I")[equal]]
+    positions_b[[i]] <- b$source_positions[[k]][cumsum(operations != "D")[equal]]
+    matches$equal_chars[i] <- sum(equal)
+    matches$similarity[i] <- sum(equal) / length(operations)
+  }
+  matches$source_positions_a <- I(positions_a)
+  matches$source_positions_b <- I(positions_b)
+  list(matches = matches, limited = limited)
+}
+
 analyze_text_pair_approx <- function(doc_a, doc_b, k = 5L, min_chars = 30L,
     min_similarity = 0.8, seed_k = 3L, window_size = 200L,
     max_pairs = 50000L, max_windows = 2000L, max_candidates = 500L,
     max_seed_pairs = 100000L, max_cells = 250000L, max_total_cells = 5000000L) {
   exact <- analyze_text_pair(doc_a, doc_b, k, min_chars, max_pairs)
-  approximate <- find_approximate_text_matches(doc_a, doc_b, seed_k, window_size,
-    min_chars, min_similarity, max_windows, max_candidates, max_seed_pairs,
-    max_cells, max_total_cells)
+  approximate <- tryCatch(
+    find_approximate_text_matches(doc_a, doc_b, seed_k, window_size,
+      min_chars, min_similarity, max_windows, max_candidates, max_seed_pairs,
+      max_cells, max_total_cells),
+    text_approximation_limit = function(e) list(status = "resource_limit",
+      error = conditionMessage(e), matches = empty_approximate_matches(), alignment_cells = NA_real_))
+  limited <- approximate$status == "resource_limit"
   columns <- c("source_positions_a", "source_positions_b")
   combined <- rbind(exact$exact_matches[, columns, drop = FALSE],
     approximate$matches[, columns, drop = FALSE])
+  short <- if (!limited) find_short_text_matches(doc_a, doc_b, min_chars)
+  coverage <- summarize_text_coverage(doc_a, doc_b, combined)
   warnings <- any(doc_a$diagnostics$severity == "warning") ||
     any(doc_b$diagnostics$severity == "warning")
   enough <- exact$jaccard$status == "ok" || approximate$status == "ok"
-  list(status = if (!enough) "insufficient_ngrams" else if (warnings) "limited" else "ok",
+  list(status = if (limited) "limited" else if (!enough) "insufficient_ngrams" else if (warnings) "limited" else "ok",
     parameters = list(k = k, min_chars = min_chars, min_similarity = min_similarity,
       seed_k = seed_k, window_size = window_size, max_pairs = max_pairs,
       max_windows = max_windows, max_candidates = max_candidates,
       max_seed_pairs = max_seed_pairs, max_cells = max_cells, max_total_cells = max_total_cells),
     jaccard = exact$jaccard, exact_matches = exact$exact_matches,
     approximate_matches = approximate$matches, exact_coverage = exact$coverage,
-    coverage = summarize_text_coverage(doc_a, doc_b, combined),
-    candidate_count = nrow(approximate$candidates), alignment_cells = approximate$alignment_cells,
+    approximate_status = approximate$status, approximate_error = if (limited) approximate$error else "",
+    coverage = coverage, short_matches = short$matches, short_matching_limited = isTRUE(short$limited),
+    coverage_with_short = if (is.null(short) || !nrow(short$matches)) coverage else
+      summarize_text_coverage(doc_a, doc_b, rbind(combined, short$matches[, columns])),
+    candidate_count = if (limited) NA_integer_ else nrow(approximate$candidates),
+    alignment_cells = approximate$alignment_cells,
     diagnostics = exact$diagnostics)
 }

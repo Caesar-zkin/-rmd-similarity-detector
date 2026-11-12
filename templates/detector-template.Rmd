@@ -1,5 +1,6 @@
 ---
 title: "Rmd 作业相似性证据报告"
+runtime: shiny
 output:
   html_document:
     self_contained: true
@@ -8,10 +9,12 @@ output:
     theme: null
     highlight: null
     anchor_sections: false
+    md_extensions: "-tex_math_dollars-tex_math_single_backslash"
 params:
   input_a: "examples/report-a.Rmd"
   input_b: "examples/report-b.Rmd"
   exclusion_file: ""
+  reference_file: ""
   max_evidence: 10
   text_k: 5
   text_min_chars: 30
@@ -27,30 +30,269 @@ params:
 <!-- Generated from R/ modules and this template. Edit sources, then rebuild. -->
 
 <style>
-body{font:16px/1.65 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#243247;background:#f6f8fb;margin:0 auto;padding:32px;max-width:1180px}h1,h2,h3{color:#17395b;line-height:1.35}h2{border-bottom:2px solid #d9e2ee;padding-bottom:10px;margin-top:40px}h4{margin:8px 0}.notice{padding:18px 22px;background:#fff4d9;border-left:5px solid #ba820d;border-radius:5px}.error{background:#fff0ef;border-color:#bb3b34}.muted{color:#64748b;font-size:.9em}.table-wrap{overflow-x:auto;margin:16px 0}table{border-collapse:collapse;width:100%;background:white;font-size:.9em}th,td{text-align:left;vertical-align:top;padding:10px 12px;border:1px solid #dce3ec;overflow-wrap:anywhere}th{background:#edf3fa}pre{background:#f0f4f9;border:1px solid #dce3ec;border-radius:5px;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 Consolas,monospace}.evidence{background:white;border:1px solid #dce3ec;border-radius:7px;padding:18px;margin:20px 0}.evidence-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}@media(max-width:760px){body{padding:16px}.evidence-pair{grid-template-columns:1fr}}
+:root {
+  color-scheme: light;
+  --paper: #f3f3fa;
+  --surface: #fff;
+  --ink: #20233d;
+  --muted: #515773;
+  --line: #d9dbeb;
+  --accent: #3f39a3;
+  --accent-light: #eeedfc;
+  --source-a: #3f39a3;
+  --source-b: #246865;
+}
+html { background: var(--paper); }
+body {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(20px, 5vw, 64px) clamp(14px, 4vw, 38px) 60px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.65 "Atkinson Hyperlegible Next", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+h1, h2, h3, h4 { color: var(--ink); font-weight: 700; line-height: 1.32; }
+h1 { margin: 0 0 22px; font-size: clamp(1.8rem, 4vw, 3.15rem); }
+h2 { margin: 36px 0 16px; font-size: clamp(1.3rem, 2.6vw, 1.8rem); }
+h3 { margin: 22px 0 10px; font-size: 1.14rem; }
+h4 { margin: 0 0 10px; font-size: .98rem; }
+p { margin: 0 0 12px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.muted { color: var(--muted); font-size: .91em; }
+.notice { padding: 16px 18px; border-radius: 9px; background: var(--accent-light); }
+.notice.error, .shiny-output-error {
+  padding: 14px 16px;
+  border-left: 4px solid #a5443f;
+  background: #fff0ee;
+  color: #7b2d29;
+  overflow-wrap: anywhere;
+}
+.notice pre { margin: 0; }
+.table-wrap { overflow-x: auto; margin: 14px 0; }
+.detector-report table { width: 100%; border-collapse: collapse; background: var(--surface); }
+.detector-report th, .detector-report td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.detector-report th { background: var(--paper); font-size: .88em; }
+.detector-report td { font-size: .93em; }
+.detector-report tbody tr:last-child td { border-bottom: 0; }
+.report-overview {
+  margin-top: 24px;
+  padding: clamp(16px, 3vw, 30px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.report-overview h2 { margin-top: 0; }
+.report-overview .table-wrap { margin: 20px 0 10px; }
+.report-overview tbody td:first-child { min-width: 4.7em; font-weight: 700; }
+.report-files, .evidence-pair, .upload-files {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.report-files { margin: 0 0 14px; }
+.report-files div, .evidence-pair > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--source-a);
+  background: var(--accent-light);
+  overflow-wrap: anywhere;
+}
+.report-files div:nth-child(2), .evidence-pair > div:nth-child(2) {
+  border-left-color: var(--source-b);
+  background: #e9f3f1;
+}
+.report-files dt { font-size: .82rem; font-weight: 700; }
+.report-files dd { margin: 0; }
+.report-outcome { padding: 20px; background: #262353; color: #fff; }
+.report-outcome strong { display: block; font-size: 1.32rem; }
+.report-outcome p { margin: 8px 0 0; max-width: 48ch; }
+.report-outcome .muted { color: #e1dff6; }
+.report-navigation { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; }
+.report-navigation a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); }
+.report-details {
+  margin: 12px 0;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.report-details > summary { padding: 11px 0; cursor: pointer; font-weight: 700; }
+.report-details[open] { padding-bottom: 14px; }
+.report-details > h2 { margin-top: 12px; }
+.evidence {
+  margin: 14px 0;
+  padding: clamp(12px, 2.4vw, 20px);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.evidence-pair { margin: 10px 0; }
+.detector-report pre {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: .86rem/1.62 Consolas, "Microsoft YaHei UI", monospace;
+}
+.detector-upload {
+  margin: 20px 0 28px;
+  padding: clamp(18px, 3.5vw, 34px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.detector-upload h2 { margin-top: 0; }
+.upload-files { margin: 20px 0 14px; }
+.upload-file {
+  min-width: 0;
+  padding: 14px;
+  border-left: 3px solid var(--source-a);
+  background: var(--accent-light);
+}
+.upload-file:nth-child(2) { border-color: var(--source-b); background: #e9f3f1; }
+.detector-upload .shiny-input-container { width: 100%; max-width: 100%; margin: 0; }
+.detector-upload .control-label { display: block; margin-bottom: 6px; font-weight: 700; }
+.detector-upload .input-group { display: flex; width: 100%; }
+.detector-upload .input-group-btn { display: flex; width: auto; margin: 0; }
+.detector-upload .btn-file, .detector-upload .form-control, .detector-upload .action-button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  font: inherit;
+}
+.detector-upload .btn-file {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 6px 0 0 6px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+.detector-upload .btn-file:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; z-index: 3; }
+.detector-upload .form-control {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 0 6px 6px 0;
+  background: var(--surface);
+  color: var(--ink);
+  text-overflow: ellipsis;
+}
+.detector-upload .shiny-file-input-progress { height: 20px; margin: 7px 0 0; }
+.detector-upload .progress-bar { background: var(--accent); color: #fff; }
+.detector-upload .progress-bar-danger { background: #a5443f; }
+@supports selector(:has(*)) {
+  .detector-upload .shiny-file-input-progress:not(.active):not(:has(.progress-bar-danger)) { display: none; }
+}
+.detector-upload .action-button {
+  padding: 8px 20px;
+  border-color: var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.detector-upload .action-button:hover { background: #302b83; color: #fff; }
+.detector-upload .reference-picker { margin-bottom: 16px; }
+@media (max-width: 600px) {
+  .report-files, .evidence-pair, .upload-files { grid-template-columns: minmax(0, 1fr); }
+  .detector-upload .action-button { width: 100%; }
+  .detector-report th, .detector-report td { padding: 9px 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .detector-upload .progress-bar { transition: none; animation: none; }
+}
 </style>
+
+<!-- Knitr removes the hidden engine before rendering. During Shiny startup, Pandoc
+     also scans the unknitted Rmd for resources. Keep the engine inside a raw block
+     so that this scan does not parse the bundled R source as Markdown. -->
+<style>
 
 ``````{r detector-engine, include=FALSE}
 @@DETECTOR_MODULES@@
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
 ``````
+</style>
 
 ``````{r evidence-report, results='asis', echo=FALSE}
-report_result <- analyze_rmd_pair(
-  params$input_a, params$input_b,
-  text_options = list(k = params$text_k, min_chars = params$text_min_chars,
-    min_similarity = params$text_min_similarity),
-  formula_options = list(min_steps = params$formula_min_steps,
-    max_steps = params$formula_max_steps, max_skips = params$formula_max_skips),
-  code_options = list(min_tokens = params$code_min_tokens,
-    window_tokens = params$code_window_tokens, max_skips = params$code_max_skips),
-  exclusions = if (nzchar(params$exclusion_file)) params$exclusion_file else NULL
+# rmarkdown removes params after knitting, before Shiny handles user input.
+settings <- params
+reference_path <- if (nzchar(settings$reference_file)) settings$reference_file else NULL
+compare_submissions <- function(input_a, input_b, reference = reference_path) analyze_rmd_pair(
+  input_a, input_b,
+  text_options = list(k = settings$text_k, min_chars = settings$text_min_chars,
+    min_similarity = settings$text_min_similarity),
+  formula_options = list(min_steps = settings$formula_min_steps,
+    max_steps = settings$formula_max_steps, max_skips = settings$formula_max_skips),
+  code_options = list(min_tokens = settings$code_min_tokens,
+    window_tokens = settings$code_window_tokens, max_skips = settings$code_max_skips),
+  exclusions = if (nzchar(settings$exclusion_file)) settings$exclusion_file else NULL,
+  public_reference = reference
 )
-# 明确作为原始 HTML 输出，避免再次按 Markdown 解析
-cat(
-  "\n```{=html}\n",
-  detector_report_html(report_result, params$max_evidence),
-  "\n```\n",
-  sep = ""
-)
+
+if (identical(knitr::opts_knit$get("rmarkdown.runtime"), "shiny")) {
+  uploaded_files <- shiny::reactive({
+    files <- list(A = input$assignment_a, B = input$assignment_b, reference = input$public_reference)
+    shiny::validate(shiny::need(all(vapply(files[1:2], function(file) NROW(file) == 1L, logical(1))),
+      "请选择两份 Rmd 作业。"))
+    selected <- Filter(Negate(is.null), files)
+    shiny::validate(shiny::need(all(vapply(selected, function(file) grepl("\\.rmd$", file$name,
+      ignore.case = TRUE), logical(1))), "所选文件都必须使用 .Rmd 扩展名。"))
+    shiny::validate(shiny::need(!nzchar(settings$exclusion_file) ||
+      (is.null(files$reference) && is.null(reference_path)), "公共参考文件和 CSV 排除配置请选择其一。"))
+    files
+  })
+  analysis <- shiny::eventReactive(input$analyze, {
+    files <- uploaded_files()
+    reference <- if (is.null(files$reference)) reference_path else files$reference$datapath
+    result <- shiny::withProgress(message = "正在分析两份作业…", value = NULL,
+      compare_submissions(files$A$datapath, files$B$datapath, reference))
+    result$manifest$filename <- vapply(files[1:2], function(file) file$name, character(1))
+    if (!is.null(files$reference) && !is.null(result$exclusions$reference_name)) {
+      result$exclusions$reference_name <- files$reference$name
+      if (nrow(result$exclusions$records)) result$exclusions$records$reference <- files$reference$name
+    }
+    list(files = files, html = detector_report_html(result, settings$max_evidence))
+  })
+  output$analysis_result <- shiny::renderUI({
+    shiny::req(input$analyze > 0L)
+    files <- uploaded_files()
+    completed <- analysis()
+    shiny::validate(shiny::need(identical(completed$files, files), "文件已更换，请重新点击「开始分析」。"))
+    htmltools::HTML(completed$html)
+  })
+  shiny::tagList(
+    shiny::tags$section(class = "detector-upload", `aria-labelledby` = "upload-title",
+      shiny::tags$h2(id = "upload-title", "比较两份作业"),
+      shiny::tags$p(class = "muted", "选择两份 UTF-8 编码的 .Rmd 文件。分析在本机完成。"),
+      shiny::tags$div(class = "upload-files",
+        shiny::tags$div(class = "upload-file", shiny::fileInput("assignment_a", "作业 A",
+          accept = ".rmd", buttonLabel = "选择文件", placeholder = "未选择文件")),
+        shiny::tags$div(class = "upload-file", shiny::fileInput("assignment_b", "作业 B",
+          accept = ".rmd", buttonLabel = "选择文件", placeholder = "未选择文件"))),
+      shiny::tags$details(class = "report-details reference-picker",
+        shiny::tags$summary("排除共同题干或模板（可选）"),
+        shiny::tags$p(class = "muted", "选择老师提供的原始题干或空白模板。报告将排除与参考一致的完整段落、公式和代码块。"),
+        shiny::fileInput("public_reference", "题干或模板", accept = ".rmd",
+          buttonLabel = "选择参考文件", placeholder = "未选择参考文件")),
+      shiny::actionButton("analyze", "开始分析")),
+    shiny::tags$div(`aria-live` = "polite", shiny::uiOutput("analysis_result"))
+  )
+} else {
+  report_result <- compare_submissions(settings$input_a, settings$input_b)
+  # 明确作为原始 HTML 输出，避免再次按 Markdown 解析
+  cat("\n```{=html}\n", detector_report_html(report_result, settings$max_evidence), "\n```\n", sep = "")
+}
 ``````
